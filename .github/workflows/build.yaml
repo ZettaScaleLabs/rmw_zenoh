@@ -2,7 +2,7 @@ name: build
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [ main, test_macros ]
 defaults:
   run:
     shell: bash
