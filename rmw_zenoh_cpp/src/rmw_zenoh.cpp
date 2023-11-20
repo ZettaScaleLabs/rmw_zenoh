@@ -206,7 +206,7 @@ rmw_create_node(
         z_drop(z_move(node_data->token));
       }
     });
-  if (!z_check(&node_data->token)) {
+  if (!z_check(node_data->token)) {
     RCUTILS_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",
       "Unable to create liveliness token for the node.");
@@ -583,7 +583,7 @@ rmw_create_publisher(
         z_drop(z_move(publisher_data->token));
       }
     });
-  if (!z_check(&publisher_data->token)) {
+  if (!z_check(publisher_data->token)) {
     RCUTILS_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",
       "Unable to create liveliness token for the publisher.");
@@ -1270,7 +1270,7 @@ rmw_create_subscription(
         z_drop(z_move(sub_data->token));
       }
     });
-  if (!z_check(&sub_data->token)) {
+  if (!z_check(sub_data->token)) {
     RCUTILS_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",
       "Unable to create liveliness token for the subscription.");
