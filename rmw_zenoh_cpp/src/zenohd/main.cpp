@@ -192,8 +192,8 @@ int main(int argc, char ** argv)
     return 1;
   }
 
-  z_owned_session_t s = z_open(z_move(config));
-  if (!z_check(s)) {
+  z_owned_session_t s;
+  if (z_open(&s, z_move(config))) {
     printf("Unable to open router session!\n");
     return 1;
   }
