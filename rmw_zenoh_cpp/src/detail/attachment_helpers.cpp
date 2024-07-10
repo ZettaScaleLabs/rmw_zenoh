@@ -28,6 +28,7 @@ namespace rmw_zenoh_cpp {
 bool get_attachment(const z_loaned_bytes_t *const attachment,
                     const std::string &key, z_owned_string_t *val) {
   if (z_bytes_is_empty(attachment)) {
+    printf("1\n");
     return false;
   }
 
@@ -37,13 +38,18 @@ bool get_attachment(const z_loaned_bytes_t *const attachment,
 
   while (z_bytes_iterator_next(&iter, &pair)) {
 
+    printf("2\n");
     z_bytes_deserialize_into_pair(z_loan(pair), &key_, &val_);
+    printf("3\n");
 
     z_owned_string_t key_string;
     z_bytes_deserialize_into_string(z_loan(key_), &key_string);
+    printf("%s\n", z_string_data(z_loan(key_string)));
     if (strcmp(z_string_data(z_loan(key_string)), key.c_str()) == 0) {
       found = true;
+    printf("4\n");
       z_bytes_deserialize_into_string(z_loan(val_), val);
+      printf("5 Found %s\n", z_string_data(z_loan(*val)));
     }
 
     z_drop(z_move(pair));

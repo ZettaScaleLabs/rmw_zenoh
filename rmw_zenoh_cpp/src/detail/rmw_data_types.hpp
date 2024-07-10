@@ -204,7 +204,7 @@ private:
 void service_data_handler(const z_loaned_query_t * query, void * service_data);
 
 ///=============================================================================
-void client_data_handler(z_owned_reply_t * reply, void * client_data);
+void client_data_handler(const z_loaned_reply_t * reply, void * client_data);
 void client_data_drop(void * data);
 
 ///=============================================================================
