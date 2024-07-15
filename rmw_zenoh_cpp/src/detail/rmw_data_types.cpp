@@ -437,6 +437,7 @@ void sub_data_handler(
   const z_loaned_sample_t * sample,
   void * data)
 {
+  RMW_ZENOH_LOG_ERROR_NAMED("DBG", "");
   z_view_string_t keystr;
   z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
 
@@ -481,7 +482,7 @@ void sub_data_handler(
   }
 
   z_owned_bytes_t payload;
-  z_bytes_clone(z_sample_payload(sample), &payload);
+  z_bytes_clone(&payload, z_sample_payload(sample));
   sub_data->add_new_message(
     std::make_unique<saved_msg_data>(
       payload,
@@ -492,7 +493,7 @@ void sub_data_handler(
 ///=============================================================================
 ZenohQuery::ZenohQuery(const z_loaned_query_t * query)
 {
-   z_query_clone(query, query_);
+   z_query_clone(query_, query);
 }
 
 ///=============================================================================
@@ -592,7 +593,7 @@ void client_data_handler(const z_loaned_reply_t * reply, void * data)
     return;
   }
   z_owned_reply_t owned_reply;
-  z_reply_clone(reply, &owned_reply);
+  z_reply_clone(&owned_reply, reply);
 
   if (!z_reply_check(&owned_reply)) {
     RMW_ZENOH_LOG_ERROR_NAMED(

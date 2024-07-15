@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdio>
 #include <fastcdr/FastBuffer.h>
 
 #include <zenoh.h>
@@ -26,6 +27,7 @@
 #include <random>
 #include <string>
 #include <utility>
+#include <zenoh_macros.h>
 
 #include "detail/attachment_helpers.hpp"
 #include "detail/cdr.hpp"
@@ -97,7 +99,7 @@ z_owned_keyexpr_t ros_topic_name_to_zenoh_key(const std::size_t domain_id,
 
   // TODO(yuyuan): use z_view_keyexpr_t?
   z_owned_keyexpr_t keyexpr;
-  z_keyexpr_from_string(&keyexpr, keyexpr_str.c_str());
+  z_keyexpr_from_str(&keyexpr, keyexpr_str.c_str());
   return keyexpr;
 }
 
@@ -282,9 +284,13 @@ rmw_node_t *rmw_create_node(rmw_context_t *context, const char *name,
     return nullptr;
   }
 
-  z_view_keyexpr_t keyexpr;
-  z_error_t z_ret = z_view_keyexpr_from_string(
-      &keyexpr, node_data->entity->keyexpr().c_str());
+  z_owned_keyexpr_t keyexpr;
+  z_error_t z_ret =
+      z_keyexpr_from_str(&keyexpr, node_data->entity->keyexpr().c_str());
+  // WARN(yuyuan): z_view_keyexpr_t would fail
+  // z_view_keyexpr_t keyexpr;
+  // z_error_t z_ret =
+  //     z_view_keyexpr_from_str(&keyexpr, node_data->entity->keyexpr().c_str());
   if (z_ret) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp", "Unable to generate keyexpr from the entity string.");
@@ -306,6 +312,7 @@ rmw_node_t *rmw_create_node(rmw_context_t *context, const char *name,
         "rmw_zenoh_cpp", "Unable to create liveliness token for the node.");
     return nullptr;
   }
+
 
   free_token.cancel();
   free_node_data.cancel();
@@ -388,9 +395,24 @@ void generate_random_gid(uint8_t gid[RMW_GID_STORAGE_SIZE]) {
       std::numeric_limits<unsigned char>::min(),
       std::numeric_limits<unsigned char>::max());
 
+  printf(">>> ");
   for (size_t i = 0; i < RMW_GID_STORAGE_SIZE; ++i) {
     gid[i] = dist(rng);
+    printf("%d, ", gid[i]);
   }
+  printf("\n");
+
+  // DBG
+  char gid_str[256];
+  gid_str[0] = '\0';
+  printf(">>> ");
+  for (int i = 0; i < (int)RMW_GID_STORAGE_SIZE; i++) {
+      char buffer[50]; // Temporary buffer to hold each number as a string
+      printf("%d, ", gid[i]);
+      sprintf(buffer, "%d, ", gid[i]);
+      strcat(gid_str, buffer); // Concatenate buffer to result
+  }
+  printf("\n");
 }
 } // namespace
 
@@ -400,6 +422,7 @@ rmw_publisher_t *rmw_create_publisher(
     const rmw_node_t *node, const rosidl_message_type_support_t *type_supports,
     const char *topic_name, const rmw_qos_profile_t *qos_profile,
     const rmw_publisher_options_t *publisher_options) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(node, nullptr);
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(node, node->implementation_identifier,
                                    rmw_zenoh_cpp::rmw_zenoh_identifier,
@@ -563,6 +586,8 @@ rmw_publisher_t *rmw_create_publisher(
   z_owned_keyexpr_t keyexpr = ros_topic_name_to_zenoh_key(
       node->context->actual_domain_id, topic_name,
       publisher_data->type_support->get_name(), type_hash_c_str);
+  z_view_string_t str;
+  z_keyexpr_as_view_string(z_loan(keyexpr), &str);
   auto always_free_ros_keyexpr = rcpputils::make_scope_exit(
       [&keyexpr]() { z_keyexpr_drop(z_move(keyexpr)); });
   if (!z_keyexpr_check(&keyexpr)) {
@@ -580,7 +605,7 @@ rmw_publisher_t *rmw_create_publisher(
 
     ze_owned_publication_cache_t pub_cache;
     if (ze_declare_publication_cache(&pub_cache, z_loan(context_impl->session),
-                                     z_loan(keyexpr), &pub_cache_opts) < 0) {
+                                     z_loan(keyexpr), &pub_cache_opts)) {
       RMW_SET_ERROR_MSG("unable to create zenoh publisher cache");
       return nullptr;
     }
@@ -631,10 +656,14 @@ rmw_publisher_t *rmw_create_publisher(
         "Unable to generate keyexpr for liveliness token for the publisher.");
     return nullptr;
   }
-  z_view_keyexpr_t liveliness_keyexpr;
-  z_view_keyexpr_from_string(&liveliness_keyexpr,
-                             publisher_data->entity->keyexpr().c_str());
-  z_error_t decl_ret = zc_liveliness_declare_token(
+  z_owned_keyexpr_t liveliness_keyexpr;
+  z_keyexpr_from_str(&liveliness_keyexpr,
+                          publisher_data->entity->keyexpr().c_str());
+  // WARN(yuyuan): z_view_keyexpr_t would fail
+  // z_view_keyexpr_t liveliness_keyexpr;
+  // z_view_keyexpr_from_str(&liveliness_keyexpr,
+  //                         publisher_data->entity->keyexpr().c_str());
+  z_error_t z_ret = zc_liveliness_declare_token(
       &publisher_data->token, z_loan(node->context->impl->session),
       z_loan(liveliness_keyexpr), NULL);
   auto free_token = rcpputils::make_scope_exit([publisher_data]() {
@@ -642,7 +671,7 @@ rmw_publisher_t *rmw_create_publisher(
       z_drop(z_move(publisher_data->token));
     }
   });
-  if (decl_ret) {
+  if (z_ret) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp",
         "Unable to create liveliness token for the publisher.");
@@ -790,7 +819,7 @@ create_map_and_set_sequence_num(int64_t sequence_number,
     return bytes;
   }
 
-  printf("key: sequence_number, val: rseq_id_str= %s", seq_id_str);
+  printf("key: sequence_number, val: rseq_id_str= %s\n", seq_id_str);
   z_view_slice_from_str(&key, "sequence_number");
   z_view_slice_from_str(&val, seq_id_str);
   z_slice_map_insert_by_copy(z_loan_mut(map), z_loan(key), z_loan(val));
@@ -807,6 +836,15 @@ create_map_and_set_sequence_num(int64_t sequence_number,
   z_view_slice_from_str(&key, "source_timestamp");
   z_view_slice_from_str(&val, source_ts_str);
   z_slice_map_insert_by_copy(z_loan_mut(map), z_loan(key), z_loan(val));
+
+  // DBG
+  char gid_str[256];
+  gid_str[0] = '\0';
+  for (int i = 0; i < (int)RMW_GID_STORAGE_SIZE; i++) {
+      char buffer[50]; // Temporary buffer to hold each number as a string
+      sprintf(buffer, "%d, ", gid[i]);
+      strcat(gid_str, buffer); // Concatenate buffer to result
+  }
 
   z_view_slice_from_str(&key, "source_gid");
   z_view_slice_wrap(&val, gid, RMW_GID_STORAGE_SIZE);
@@ -825,6 +863,7 @@ create_map_and_set_sequence_num(int64_t sequence_number,
 /// Publish a ROS message.
 rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
                       rmw_publisher_allocation_t *allocation) {
+
   static_cast<void>(allocation);
   RMW_CHECK_FOR_NULL_WITH_MSG(publisher, "publisher handle is null",
                               return RMW_RET_INVALID_ARGUMENT);
@@ -1450,9 +1489,14 @@ rmw_subscription_t *rmw_create_subscription(
                               "for the subscription.");
     return nullptr;
   }
-  z_view_keyexpr_t token_keyexpr;
-  ret = z_view_keyexpr_from_string(&token_keyexpr,
-                                   sub_data->entity->keyexpr().c_str());
+  z_owned_keyexpr_t token_keyexpr;
+  ret = z_keyexpr_from_str(&token_keyexpr,
+                                sub_data->entity->keyexpr().c_str());
+  // WARN(yuyuan): z_view_keyexpr_t would fail
+  // z_view_keyexpr_t token_keyexpr;
+  // ret = z_view_keyexpr_from_str(&token_keyexpr,
+  //                               sub_data->entity->keyexpr().c_str());
+
   if (ret) {
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr for liveness.");
     return nullptr;
@@ -1809,6 +1853,7 @@ rmw_ret_t __rmw_take_serialized(const rmw_subscription_t *subscription,
                                    rmw_zenoh_cpp::rmw_zenoh_identifier,
                                    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
 
+
   *taken = false;
 
   auto sub_data =
@@ -1930,6 +1975,7 @@ rmw_ret_t rmw_return_loaned_message_from_subscription(
 rmw_client_t *rmw_create_client(
     const rmw_node_t *node, const rosidl_service_type_support_t *type_supports,
     const char *service_name, const rmw_qos_profile_t *qos_profile) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(node, nullptr);
 
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(node, node->implementation_identifier,
@@ -2157,11 +2203,17 @@ rmw_client_t *rmw_create_client(
         "Unable to generate keyexpr for liveliness token for the client.");
     return nullptr;
   }
-  z_view_keyexpr_t keyexpr;
-  z_view_keyexpr_from_string(&keyexpr, client_data->entity->keyexpr().c_str());
+  z_owned_keyexpr_t keyexpr;
+  z_keyexpr_from_str(&keyexpr, client_data->entity->keyexpr().c_str());
   zc_liveliness_declare_token(&client_data->token,
                               z_loan(node->context->impl->session),
                               z_loan(keyexpr), NULL);
+  // WARN(yuyuan): z_view_keyexpr_t would fail
+  // z_view_keyexpr_t keyexpr;
+  // z_view_keyexpr_from_str(&keyexpr, client_data->entity->keyexpr().c_str());
+  // zc_liveliness_declare_token(&client_data->token,
+  //                             z_loan(node->context->impl->session),
+  //                             z_loan(keyexpr), NULL);
   auto free_token = rcpputils::make_scope_exit([client_data]() {
     if (client_data != nullptr) {
       z_drop(z_move(client_data->token));
@@ -2241,6 +2293,7 @@ rmw_ret_t rmw_destroy_client(rmw_node_t *node, rmw_client_t *client) {
 /// Send a ROS service request.
 rmw_ret_t rmw_send_request(const rmw_client_t *client, const void *ros_request,
                            int64_t *sequence_id) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(client->data, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(ros_request, RMW_RET_INVALID_ARGUMENT);
@@ -2684,11 +2737,11 @@ rmw_service_t *rmw_create_service(
   z_queryable_options_t qable_options;
   z_queryable_options_default(&qable_options);
   qable_options.complete = true;
-  z_error_t decl_ret = z_declare_queryable(
+  z_error_t z_ret = z_declare_queryable(
       &service_data->qable, z_loan(context_impl->session),
       z_loan(service_data->keyexpr), z_move(callback), &qable_options);
 
-  if (decl_ret) {
+  if (z_ret) {
     RMW_SET_ERROR_MSG("unable to create zenoh queryable");
     return nullptr;
   }
@@ -2713,18 +2766,30 @@ rmw_service_t *rmw_create_service(
     return nullptr;
   }
 
-  z_view_keyexpr_t keyexpr;
-  z_view_keyexpr_from_string(&keyexpr, service_data->entity->keyexpr().c_str());
-  ret = zc_liveliness_declare_token(&service_data->token,
-                                    z_loan(node->context->impl->session),
-                                    z_loan(keyexpr), NULL);
+  z_owned_keyexpr_t keyexpr;
+  z_keyexpr_from_str(&keyexpr, service_data->entity->keyexpr().c_str());
+  // WARN(yuyuan): z_view_keyexpr_t would fail
+  // z_view_keyexpr_t keyexpr;
+  // z_view_keyexpr_from_str(&keyexpr, service_data->entity->keyexpr().c_str());
+
+  z_view_string_t str;
+  z_keyexpr_as_view_string(z_loan(keyexpr), &str);
+
+  z_ret = zc_liveliness_declare_token(&service_data->token,
+                                      z_loan(node->context->impl->session),
+                                      z_loan(keyexpr), NULL);
+
+  auto free_keyexpr = rcpputils::make_scope_exit([&keyexpr]() {
+      z_drop(z_move(keyexpr));
+  });
+
 
   auto free_token = rcpputils::make_scope_exit([service_data]() {
     if (service_data != nullptr) {
       z_drop(z_move(service_data->token));
     }
   });
-  if (ret) {
+  if (z_ret) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp", "Unable to create liveliness token for the service.");
     return nullptr;
@@ -2743,6 +2808,7 @@ rmw_service_t *rmw_create_service(
   free_ros_keyexpr.cancel();
   undeclare_z_queryable.cancel();
   free_token.cancel();
+  free_keyexpr.cancel();
 
   return rmw_service;
 }
@@ -2799,6 +2865,7 @@ rmw_ret_t rmw_destroy_service(rmw_node_t *node, rmw_service_t *service) {
 rmw_ret_t rmw_take_request(const rmw_service_t *service,
                            rmw_service_info_t *request_header,
                            void *ros_request, bool *taken) {
+
   *taken = false;
 
   RMW_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
@@ -3085,6 +3152,7 @@ rmw_trigger_guard_condition(const rmw_guard_condition_t *guard_condition) {
 /// Create a wait set to store conditions that the middleware can wait on.
 rmw_wait_set_t *rmw_create_wait_set(rmw_context_t *context,
                                     size_t max_conditions) {
+
   static_cast<void>(max_conditions);
 
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(context, NULL);
@@ -3253,6 +3321,7 @@ rmw_ret_t rmw_wait(rmw_subscriptions_t *subscriptions,
                    rmw_services_t *services, rmw_clients_t *clients,
                    rmw_events_t *events, rmw_wait_set_t *wait_set,
                    const rmw_time_t *wait_timeout) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(wait_set, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(wait set handle,
                                    wait_set->implementation_identifier,
@@ -3418,6 +3487,7 @@ rmw_ret_t rmw_wait(rmw_subscriptions_t *subscriptions,
 rmw_ret_t rmw_get_node_names(const rmw_node_t *node,
                              rcutils_string_array_t *node_names,
                              rcutils_string_array_t *node_namespaces) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(node, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context->impl, RMW_RET_INVALID_ARGUMENT);
@@ -3436,6 +3506,7 @@ rmw_ret_t rmw_get_node_names(const rmw_node_t *node,
 rmw_ret_t rmw_get_node_names_with_enclaves(
     const rmw_node_t *node, rcutils_string_array_t *node_names,
     rcutils_string_array_t *node_namespaces, rcutils_string_array_t *enclaves) {
+
   RMW_CHECK_ARGUMENT_FOR_NULL(node, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context->impl, RMW_RET_INVALID_ARGUMENT);

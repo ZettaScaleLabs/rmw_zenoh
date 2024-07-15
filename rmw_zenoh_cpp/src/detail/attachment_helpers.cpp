@@ -21,6 +21,8 @@
 
 #include "rmw/types.h"
 
+#include "logging_macros.hpp"
+
 #include "attachment_helpers.hpp"
 
 namespace rmw_zenoh_cpp {
@@ -28,7 +30,6 @@ namespace rmw_zenoh_cpp {
 bool get_attachment(const z_loaned_bytes_t *const attachment,
                     const std::string &key, z_owned_string_t *val) {
   if (z_bytes_is_empty(attachment)) {
-    printf("1\n");
     return false;
   }
 
@@ -37,19 +38,12 @@ bool get_attachment(const z_loaned_bytes_t *const attachment,
   bool found = false;
 
   while (z_bytes_iterator_next(&iter, &pair)) {
-
-    printf("2\n");
     z_bytes_deserialize_into_pair(z_loan(pair), &key_, &val_);
-    printf("3\n");
-
     z_owned_string_t key_string;
     z_bytes_deserialize_into_string(z_loan(key_), &key_string);
-    printf("%s\n", z_string_data(z_loan(key_string)));
     if (strcmp(z_string_data(z_loan(key_string)), key.c_str()) == 0) {
       found = true;
-    printf("4\n");
       z_bytes_deserialize_into_string(z_loan(val_), val);
-      printf("5 Found %s\n", z_string_data(z_loan(*val)));
     }
 
     z_drop(z_move(pair));
@@ -76,22 +70,62 @@ bool get_attachment(const z_loaned_bytes_t *const attachment,
 bool get_gid_from_attachment(const z_loaned_bytes_t *const attachment,
                              uint8_t gid[RMW_GID_STORAGE_SIZE]) {
 
-  z_owned_string_t index;
-  if (!get_attachment(attachment, "source_gid", &index)) {
-    z_drop(z_move(index));
+  if (z_bytes_is_empty(attachment)) {
     return false;
   }
 
-  size_t len = z_string_len(z_loan(index));
-  if (len != RMW_GID_STORAGE_SIZE) {
+  z_bytes_iterator_t iter = z_bytes_get_iterator(attachment);
+  z_owned_bytes_t pair, key_, val_;
+  bool found = false;
+  z_owned_slice_t zslice;
+
+  while (z_bytes_iterator_next(&iter, &pair)) {
+    z_bytes_deserialize_into_pair(z_loan(pair), &key_, &val_);
+    z_owned_string_t key_string;
+    z_bytes_deserialize_into_string(z_loan(key_), &key_string);
+    if (strcmp(z_string_data(z_loan(key_string)), "source_gid") == 0) {
+      found = true;
+      z_bytes_deserialize_into_slice(z_loan(val_), &zslice);
+    }
+
+    z_drop(z_move(pair));
+    z_drop(z_move(key_));
+    z_drop(z_move(val_));
+    z_drop(z_move(key_string));
+
+    if (found) {
+      break;
+    }
+  }
+
+  if (!found) {
     return false;
   }
 
-  const char *start = z_string_data(z_loan(index));
-  memcpy(gid, start, len);
+  if (z_slice_len(z_loan(zslice)) != RMW_GID_STORAGE_SIZE) {
+    return false;
+  }
 
-  z_drop(z_move(index));
+  memcpy(gid, z_slice_data(z_loan(zslice)), z_slice_len(z_loan(zslice)));
+  z_drop(z_move(zslice));
+
   return true;
+  // z_owned_string_t index;
+  // if (!get_attachment(attachment, "source_gid", &index)) {
+  //   z_drop(z_move(index));
+  //   return false;
+  // }
+  //
+  // size_t len = z_string_len(z_loan(index));
+  // if (len != RMW_GID_STORAGE_SIZE) {
+  //   return false;
+  // }
+  //
+  // const char *start = z_string_data(z_loan(index));
+  // memcpy(gid, start, len);
+  //
+  // z_drop(z_move(index));
+  // return true;
 }
 
 int64_t get_int64_from_attachment(const z_loaned_bytes_t *const attachment,
@@ -102,7 +136,7 @@ int64_t get_int64_from_attachment(const z_loaned_bytes_t *const attachment,
   }
 
   z_owned_string_t index;
-  if (!get_attachment(attachment,name, &index)) {
+  if (!get_attachment(attachment, name, &index)) {
     z_drop(z_move(index));
     return -1;
   }

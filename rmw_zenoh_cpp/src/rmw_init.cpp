@@ -36,6 +36,7 @@
 
 #include "rcpputils/scope_exit.hpp"
 
+
 extern "C" {
 // Megabytes of SHM to reserve.
 // TODO(clalancette): Make this configurable, or get it from the configuration
@@ -46,6 +47,7 @@ namespace
 void
 graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
 {
+
   static_cast<void>(data);
 
   z_view_string_t keystr;
@@ -312,13 +314,18 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   // the thread.
   z_owned_fifo_handler_reply_t handler;
   z_owned_closure_reply_t closure;
-  z_fifo_channel_reply_new(&closure, &handler, 256);
+  // TODO(yuyuan): This one needs to be inifinite
+  z_fifo_channel_reply_new(&closure, &handler, 100000);
 
-  z_view_keyexpr_t keyexpr;
-  z_view_keyexpr_from_string(&keyexpr, liveliness_str.c_str());
+  // TODO(yuyuan): improve this
+  z_owned_keyexpr_t keyexpr;
+  z_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
+  // z_view_keyexpr_t keyexpr;
+  // z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
   zc_liveliness_get(z_loan(context->impl->session), z_loan(keyexpr),
                     z_move(closure), NULL);
   z_owned_reply_t reply;
+
 
   while (z_recv(z_loan(handler), &reply)) {
     if (z_reply_is_ok(z_loan(reply))) {
@@ -352,11 +359,21 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   zc_liveliness_subscriber_options_default(&sub_options);
   z_owned_closure_sample_t callback;
   z_closure(&callback, graph_sub_data_handler, nullptr, context->impl);
-  z_view_keyexpr_from_string(&keyexpr, liveliness_str.c_str());
+
+  // TODO(yuyuan): improve this
+  z_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
+  // z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
+
   zc_liveliness_declare_subscriber(
       &context->impl->graph_subscriber,
       z_loan(context->impl->session), z_loan(keyexpr),
       z_move(callback), &sub_options);
+
+  const z_loaned_keyexpr_t *sub_ke = z_subscriber_keyexpr(z_loan(context->impl->graph_subscriber));
+  z_view_string_t sub_keyexpr;
+  z_keyexpr_as_view_string(sub_ke, &sub_keyexpr);
+
+
   auto undeclare_z_sub = rcpputils::make_scope_exit([context]() {
     z_undeclare_subscriber(z_move(context->impl->graph_subscriber));
   });
