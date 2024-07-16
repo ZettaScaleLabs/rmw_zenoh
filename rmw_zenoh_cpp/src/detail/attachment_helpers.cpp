@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdio>
 #include <zenoh.h>
 
 #include <cstdlib>
@@ -27,28 +28,66 @@
 
 namespace rmw_zenoh_cpp {
 
+bool create_attachment_iter(z_owned_bytes_t *kv_pair, void *context) {
+  attachement_context_t *ctx = (attachement_context_t *)context;
+  z_owned_bytes_t k, v;
+
+  if (ctx->idx == 0) {
+    z_bytes_serialize_from_str(&k, "sequence_number");
+    z_bytes_serialize_from_int64(&v, ctx->data->sequence_number);
+  } else if (ctx->idx == 1) {
+    z_bytes_serialize_from_str(&k, "source_timestamp");
+    z_bytes_serialize_from_int64(&v, ctx->data->source_timestamp);
+  } else if (ctx->idx == 2) {
+    z_bytes_serialize_from_str(&k, "source_gid");
+    z_bytes_serialize_from_slice_copy(&v, ctx->data->source_gid,
+                                      RMW_GID_STORAGE_SIZE);
+  } else {
+    return false;
+  }
+
+  z_bytes_serialize_from_pair(kv_pair, z_move(k), z_move(v));
+  ctx->idx += 1;
+  return true;
+}
+
+z_error_t attachement_data_t::serialize_to_zbytes(z_owned_bytes_t *attachment) {
+  attachement_context_t context = attachement_context_t(this);
+  return z_bytes_serialize_from_iter(attachment, create_attachment_iter,
+                                     (void *)&context);
+}
+
 bool get_attachment(const z_loaned_bytes_t *const attachment,
-                    const std::string &key, z_owned_string_t *val) {
+                    const std::string &key, z_owned_bytes_t *val) {
   if (z_bytes_is_empty(attachment)) {
     return false;
   }
 
   z_bytes_iterator_t iter = z_bytes_get_iterator(attachment);
-  z_owned_bytes_t pair, key_, val_;
+  z_owned_bytes_t pair, key_;
   bool found = false;
 
   while (z_bytes_iterator_next(&iter, &pair)) {
-    z_bytes_deserialize_into_pair(z_loan(pair), &key_, &val_);
+    z_bytes_deserialize_into_pair(z_loan(pair), &key_, val);
     z_owned_string_t key_string;
     z_bytes_deserialize_into_string(z_loan(key_), &key_string);
-    if (strcmp(z_string_data(z_loan(key_string)), key.c_str()) == 0) {
+
+    char dbg_info[120];
+    sprintf(dbg_info, "Given key: %s, found: %s", key.c_str(),
+            z_string_data(z_loan(key_string)));
+    sprintf(dbg_info, "Given key: %s, found: %.*s", key.c_str(),
+            (int)z_string_len(z_loan(key_string)),
+            z_string_data(z_loan(key_string)));
+
+    std::string found_key;
+    found_key.assign(z_string_data(z_loan(key_string)), z_string_len(z_loan(key_string)));
+    if (found_key == key) {
+    // if (strcmp(z_string_data(z_loan(key_string)), key.c_str()) == 0) {
       found = true;
-      z_bytes_deserialize_into_string(z_loan(val_), val);
     }
 
     z_drop(z_move(pair));
     z_drop(z_move(key_));
-    z_drop(z_move(val_));
     z_drop(z_move(key_string));
 
     if (found) {
@@ -60,7 +99,7 @@ bool get_attachment(const z_loaned_bytes_t *const attachment,
     return false;
   }
 
-  if (!z_string_check(val)) {
+  if (z_bytes_is_empty(z_loan(*val))) {
     return false;
   }
 
@@ -74,58 +113,23 @@ bool get_gid_from_attachment(const z_loaned_bytes_t *const attachment,
     return false;
   }
 
-  z_bytes_iterator_t iter = z_bytes_get_iterator(attachment);
-  z_owned_bytes_t pair, key_, val_;
-  bool found = false;
-  z_owned_slice_t zslice;
-
-  while (z_bytes_iterator_next(&iter, &pair)) {
-    z_bytes_deserialize_into_pair(z_loan(pair), &key_, &val_);
-    z_owned_string_t key_string;
-    z_bytes_deserialize_into_string(z_loan(key_), &key_string);
-    if (strcmp(z_string_data(z_loan(key_string)), "source_gid") == 0) {
-      found = true;
-      z_bytes_deserialize_into_slice(z_loan(val_), &zslice);
-    }
-
-    z_drop(z_move(pair));
-    z_drop(z_move(key_));
-    z_drop(z_move(val_));
-    z_drop(z_move(key_string));
-
-    if (found) {
-      break;
-    }
-  }
-
-  if (!found) {
+  z_owned_bytes_t val;
+  if (!get_attachment(attachment, "source_gid", &val)) {
     return false;
   }
 
-  if (z_slice_len(z_loan(zslice)) != RMW_GID_STORAGE_SIZE) {
+  z_owned_slice_t slice;
+  z_bytes_deserialize_into_slice(z_loan(val), &slice);
+  if (z_slice_len(z_loan(slice)) != RMW_GID_STORAGE_SIZE) {
+    RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "GID length mismatched.")
     return false;
   }
+  memcpy(gid, z_slice_data(z_loan(slice)), z_slice_len(z_loan(slice)));
 
-  memcpy(gid, z_slice_data(z_loan(zslice)), z_slice_len(z_loan(zslice)));
-  z_drop(z_move(zslice));
+  z_drop(z_move(val));
+  z_drop(z_move(slice));
 
   return true;
-  // z_owned_string_t index;
-  // if (!get_attachment(attachment, "source_gid", &index)) {
-  //   z_drop(z_move(index));
-  //   return false;
-  // }
-  //
-  // size_t len = z_string_len(z_loan(index));
-  // if (len != RMW_GID_STORAGE_SIZE) {
-  //   return false;
-  // }
-  //
-  // const char *start = z_string_data(z_loan(index));
-  // memcpy(gid, start, len);
-  //
-  // z_drop(z_move(index));
-  // return true;
 }
 
 int64_t get_int64_from_attachment(const z_loaned_bytes_t *const attachment,
@@ -135,47 +139,25 @@ int64_t get_int64_from_attachment(const z_loaned_bytes_t *const attachment,
     return -1;
   }
 
-  z_owned_string_t index;
-  if (!get_attachment(attachment, name, &index)) {
-    z_drop(z_move(index));
+  // TODO(yuyuan): This key should be specific
+  z_owned_bytes_t val;
+  if (!get_attachment(attachment, name, &val)) {
+    RMW_ZENOH_LOG_ERROR_NAMED(
+        "rmw_zenoh_cpp", "Failed to deserialize int64 from the attachment.")
+    return false;
+  }
+
+  int64_t num;
+  if (z_bytes_deserialize_into_int64(z_loan(val), &num)) {
     return -1;
   }
 
-  size_t len = z_string_len(z_loan(index));
-  if (len < 1) {
-    return -1;
-  }
-
-  if (len > 19) {
-    // The number was larger than we expected
-    return -1;
-  }
-
-  // The largest possible int64_t number is INT64_MAX, i.e. 9223372036854775807.
-  // That is 19 characters long, plus one for the trailing \0, means we need 20
-  // bytes.
-  char int64_str[20];
-
-  memcpy(int64_str, z_string_data(z_loan(index)), len);
-  int64_str[len] = '\0';
-
-  errno = 0;
-  char *endptr;
-  int64_t num = strtol(int64_str, &endptr, 10);
   if (num == 0) {
     // This is an error regardless; the client should never send this
-    return -1;
-  } else if (endptr == int64_str) {
-    // No values were converted, this is an error
-    return -1;
-  } else if (*endptr != '\0') {
-    // There was junk after the number
-    return -1;
-  } else if (errno != 0) {
-    // Some other error occurred, which may include overflow or underflow
     return -1;
   }
 
   return num;
 }
+
 } // namespace rmw_zenoh_cpp

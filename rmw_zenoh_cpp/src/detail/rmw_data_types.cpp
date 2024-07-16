@@ -437,7 +437,6 @@ void sub_data_handler(
   const z_loaned_sample_t * sample,
   void * data)
 {
-  RMW_ZENOH_LOG_ERROR_NAMED("DBG", "");
   z_view_string_t keystr;
   z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
 
