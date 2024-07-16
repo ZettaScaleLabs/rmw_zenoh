@@ -485,7 +485,7 @@ void sub_data_handler(
   sub_data->add_new_message(
     std::make_unique<saved_msg_data>(
       payload,
-      z_timestamp_npt64_time(z_sample_timestamp(sample)),
+      z_timestamp_ntp64_time(z_sample_timestamp(sample)),
       pub_gid, sequence_number, source_timestamp), z_string_data(z_loan(keystr)));
 }
 
