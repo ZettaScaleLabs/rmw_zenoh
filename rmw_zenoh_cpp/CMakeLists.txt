@@ -13,7 +13,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-
+find_package(zenohc REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(fastcdr CONFIG REQUIRED)
 find_package(rcpputils REQUIRED)
@@ -23,9 +23,6 @@ find_package(rosidl_typesupport_fastrtps_cpp REQUIRED)
 find_package(rmw REQUIRED)
 find_package(zenoh_c_vendor REQUIRED)
 find_package(zenohc_debug QUIET)
-if(NOT zenohc_debug_FOUND)
-  find_package(zenohc REQUIRED)
-endif()
 
 add_library(rmw_zenoh_cpp SHARED
   src/detail/attachment_helpers.cpp
