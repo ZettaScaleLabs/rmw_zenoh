@@ -314,6 +314,8 @@ rmw_node_t *rmw_create_node(rmw_context_t *context, const char *name,
     return nullptr;
   }
 
+  z_drop(z_move(keyexpr));
+
   free_token.cancel();
   free_node_data.cancel();
   free_namespace.cancel();
@@ -663,6 +665,9 @@ rmw_publisher_t *rmw_create_publisher(
     return nullptr;
   }
 
+  z_drop(z_move(keyexpr));
+  z_drop(z_move(liveliness_keyexpr));
+
   free_token.cancel();
   undeclare_z_publisher_cache.cancel();
   undeclare_z_publisher.cancel();
@@ -903,7 +908,12 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   //         allocator->deallocate(msg_bytes, allocator->state);
   //       }
   //     });
-  //
+  auto free_msg_bytes =
+      rcpputils::make_scope_exit([&msg_bytes, allocator]() {
+        if (msg_bytes) {
+          allocator->deallocate(msg_bytes, allocator->state);
+        }
+      });
   // // Get memory from SHM buffer if available.
   // if (publisher_data->context->impl->shm_manager.has_value() &&
   //     zc_shm_manager_check(
@@ -1694,6 +1704,7 @@ rmw_ret_t __rmw_take_one(rmw_zenoh_cpp::rmw_subscription_data_t *sub_data,
   }
 
   *taken = true;
+  z_drop(z_move(slice));
 
   return RMW_RET_OK;
 }
@@ -1886,6 +1897,7 @@ rmw_ret_t __rmw_take_serialized(const rmw_subscription_t *subscription,
   memcpy(serialized_message->buffer, z_slice_data(z_loan(payload)),
          z_slice_len(z_loan(payload)));
 
+  z_drop(z_move(payload));
   *taken = true;
 
   if (message_info != nullptr) {
@@ -2223,6 +2235,8 @@ rmw_client_t *rmw_create_client(
     return nullptr;
   }
 
+  z_drop(z_move(keyexpr));
+
   rmw_client->data = client_data;
 
   free_token.cancel();
@@ -2479,6 +2493,7 @@ rmw_ret_t rmw_take_response(const rmw_client_t *client,
   auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
   request_header->received_timestamp = now_ns.count();
 
+  z_drop(z_move(payload));
   *taken = true;
 
   return RMW_RET_OK;
@@ -2791,6 +2806,8 @@ rmw_service_t *rmw_create_service(
     return nullptr;
   }
 
+  z_drop(z_move(keyexpr));
+
   rmw_service->data = service_data;
 
   free_rmw_service.cancel();
@@ -2952,6 +2969,7 @@ rmw_ret_t rmw_take_request(const rmw_service_t *service,
     return RMW_RET_ERROR;
   }
 
+  z_drop(z_move(payload));
   *taken = true;
 
   return RMW_RET_OK;
@@ -3033,6 +3051,8 @@ rmw_ret_t rmw_send_response(const rmw_service_t *service,
       &payload, reinterpret_cast<const uint8_t *>(response_bytes), data_length);
   z_query_reply(loaned_query, z_loan(service_data->keyexpr), z_move(payload),
                 &options);
+
+  z_drop(z_move(payload));
 
   return RMW_RET_OK;
 }
