@@ -448,6 +448,9 @@ void GraphCache::update_topic_map_for_del(
     return;
   }
   const liveliness::TopicInfo topic_info = entity->topic_info().value();
+  RMW_ZENOH_LOG_WARN_NAMED(
+    "rmw_zenoh_cpp",
+    "[update_topic_map_for_del] topic_info.name_=%s", topic_info.name_.c_str());
   const bool is_pub = is_entity_pub(*entity);
 
   GraphNode::TopicMap::iterator cache_topic_it =
