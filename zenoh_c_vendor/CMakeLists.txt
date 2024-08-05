@@ -8,7 +8,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_vendor_package REQUIRED)
+# find_package(ament_cmake_vendor_package REQUIRED)
 
 # Disable default features and enable only the most useful ones. This reduces build time and footprint.
 # For a complete list of features see: https://github.com/eclipse-zenoh/zenoh/blob/main/zenoh/Cargo.toml
@@ -23,11 +23,25 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 # - https://github.com/eclipse-zenoh/zenoh/pull/1022 (fix empty messages received if payload >btach size)
 # - https://github.com/eclipse-zenoh/zenoh-c/pull/358 (fix debian packaging issue: https://github.com/jspricke/ros-deb-builder-action/issues/49)
 # - https://github.com/eclipse-zenoh/zenoh/pull/1150 (fix deadlock issue https://github.com/ros2/rmw_zenoh/issues/182)
-ament_vendor(zenoh_c_vendor
-  VCS_URL https://github.com/eclipse-zenoh/zenoh-c
-  VCS_VERSION dev/1.0.0
-  CMAKE_ARGS
-    "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
+# ament_vendor(zenoh_c_vendor
+#   VCS_URL https://github.com/eclipse-zenoh/zenoh-c
+#   VCS_VERSION dev/1.0.0
+#   CMAKE_ARGS
+#     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
+# )
+
+include(ExternalProject)
+set(ZENOHC_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
+ExternalProject_Add(zenohc
+  PREFIX ${CMAKE_BINARY_DIR}/zenohc
+  GIT_REPOSITORY https://github.com/eclipse-zenoh/zenoh-c.git
+  GIT_TAG dev/1.0.0
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZENOHC_INSTALL_DIR} -DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}
+  BUILD_IN_SOURCE 1
 )
+add_custom_target(zenoh_c_vendor ALL
+  DEPENDS zenohc
+)
+list(APPEND CMAKE_PREFIX_PATH ${ZENOHC_INSTALL_DIR})
 
 ament_package()
