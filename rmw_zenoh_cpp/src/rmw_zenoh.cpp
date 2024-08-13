@@ -625,6 +625,14 @@ rmw_publisher_t *rmw_create_publisher(
           RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
     opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
   }
+
+  // TODO(yuyuan): publisher reliability
+  if (publisher_data->adapted_qos_profile.reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
+    opts.reliability = Z_RELIABILITY_RELIABLE;
+  } else {
+    opts.reliability = Z_RELIABILITY_BEST_EFFORT;
+  }
+
   // TODO(clalancette): What happens if the key name is a valid but empty
   // string?
   if (z_declare_publisher(&publisher_data->pub, z_loan(context_impl->session),
@@ -1391,15 +1399,6 @@ rmw_subscription_t *rmw_create_subscription(
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr.");
     return nullptr;
   }
-
-  // // TODO(yuyuan): owned_key_str seems to be useless here?
-  // // Instantiate the subscription with suitable options depending on the
-  // // adapted_qos_profile.
-  // // TODO(Yadunund): Rely on a separate function to return the sub
-  // // as we start supporting more qos settings.
-  // z_owned_str_t owned_key_str = z_keyexpr_to_string(z_loan(keyexpr));
-  // auto always_drop_keystr = rcpputils::make_scope_exit(
-  //     [&owned_key_str]() { z_drop(z_move(owned_key_str)); });
 
   if (sub_data->adapted_qos_profile.durability ==
       RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL) {
