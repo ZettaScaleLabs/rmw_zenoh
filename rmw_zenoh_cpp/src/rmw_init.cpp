@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdio>
-#include <optional>
 #include <zenoh.h>
+#include <zenoh_macros.h>
 
+#include <cstdio>
 #include <new>
+#include <optional>
 #include <string>
 #include <thread>
-#include <zenoh_macros.h>
 
 #include "detail/guard_condition.hpp"
 #include "detail/identifier.hpp"
@@ -50,7 +50,6 @@ namespace
 void
 graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
 {
-
   static_cast<void>(data);
 
   z_view_string_t keystr;
@@ -93,7 +92,6 @@ graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
 //==============================================================================
 /// Initialize the middleware with the given options, and yielding an context.
 rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(options, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_FOR_NULL_WITH_MSG(options->implementation_identifier,
@@ -182,7 +180,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   // TODO(yuyuan): SHM
   z_owned_string_t shm_enabled;
   zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled);
-  auto free_shm_= rcpputils::make_scope_exit(
+  auto free_shm_ = rcpputils::make_scope_exit(
     [&shm_enabled]() {
       z_drop(z_move(shm_enabled));
     });
@@ -455,4 +453,4 @@ rmw_ret_t rmw_context_fini(rmw_context_t *context) {
 
   return ret;
 }
-} // extern "C"
+}  // extern "C"

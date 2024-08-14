@@ -55,6 +55,6 @@ bool get_gid_from_attachment(const z_loaned_bytes_t *const attachment,
 
 int64_t get_int64_from_attachment(const z_loaned_bytes_t *const attachment,
                                   const std::string &name);
-} // namespace rmw_zenoh_cpp
+}  // namespace rmw_zenoh_cpp
 
-#endif // DETAIL__ATTACHMENT_HELPERS_HPP_
+#endif  // DETAIL__ATTACHMENT_HELPERS_HPP_

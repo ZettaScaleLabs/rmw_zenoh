@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <vector>
 #include <zenoh.h>
+#include <zenoh_macros.h>
 
 #include <condition_variable>
 #include <cstring>
@@ -22,7 +22,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <zenoh_macros.h>
+#include <vector>
 
 #include "logging_macros.hpp"
 
@@ -50,7 +50,7 @@ size_t hash_gid(const uint8_t *gid) {
 size_t hash_gid(const rmw_request_id_t &request_id) {
   return hash_gid(request_id.writer_guid);
 }
-} // namespace
+}  // namespace
 
 ///=============================================================================
 size_t rmw_context_impl_s::get_next_entity_id() { return next_entity_id_++; }
@@ -540,7 +540,7 @@ void client_data_handler(const z_loaned_reply_t *reply, void *data) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp",
         "z_reply_is_ok returned False for keyexpr %s. Reason: %.*s",
-        z_string_data(z_loan(keystr)), (int)z_string_len(z_loan(err_str)),
+        z_string_data(z_loan(keystr)), static_cast<int>(z_string_len(z_loan(err_str))),
         z_string_data(z_loan(err_str)));
     z_drop(z_move(err_str));
     return;
@@ -580,4 +580,4 @@ void client_data_drop(void *data) {
   }
 }
 
-} // namespace rmw_zenoh_cpp
+}  // namespace rmw_zenoh_cpp

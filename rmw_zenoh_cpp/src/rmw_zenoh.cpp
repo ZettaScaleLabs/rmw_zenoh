@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdio>
 #include <fastcdr/FastBuffer.h>
-
 #include <zenoh.h>
+#include <zenoh_macros.h>
 
 #include <chrono>
 #include <cinttypes>
+#include <cstdio>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -27,7 +27,6 @@
 #include <random>
 #include <string>
 #include <utility>
-#include <zenoh_macros.h>
 
 #include "detail/attachment_helpers.hpp"
 #include "detail/cdr.hpp"
@@ -157,7 +156,7 @@ find_service_type_support(const rosidl_service_type_support_t *type_supports) {
   return type_support;
 }
 
-} // namespace
+}  // namespace
 
 extern "C" {
 
@@ -196,8 +195,6 @@ bool rmw_feature_supported(rmw_feature_t feature) {
 /// Create a node and return a handle to that node.
 rmw_node_t *rmw_create_node(rmw_context_t *context, const char *name,
                             const char *namespace_) {
-
-
   RMW_CHECK_ARGUMENT_FOR_NULL(context, nullptr);
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(context, context->implementation_identifier,
                                    rmw_zenoh_cpp::rmw_zenoh_identifier,
@@ -410,7 +407,7 @@ void generate_random_gid(uint8_t gid[RMW_GID_STORAGE_SIZE]) {
     gid[i] = dist(rng);
   }
 }
-} // namespace
+}  // namespace
 
 //==============================================================================
 /// Create a publisher and return a handle to that publisher.
@@ -797,7 +794,6 @@ namespace {
 z_owned_bytes_t
 create_map_and_set_sequence_num(int64_t sequence_number,
                                 uint8_t gid[RMW_GID_STORAGE_SIZE]) {
-
   // z_owned_slice_map_t map;
   // z_slice_map_new(&map);
 
@@ -854,14 +850,12 @@ create_map_and_set_sequence_num(int64_t sequence_number,
 
   return bytes;
 }
-} // namespace
+}  // namespace
 
 //==============================================================================
 /// Publish a ROS message.
 rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
                       rmw_publisher_allocation_t *allocation) {
-
-
   static_cast<void>(allocation);
   RMW_CHECK_FOR_NULL_WITH_MSG(publisher, "publisher handle is null",
                               return RMW_RET_INVALID_ARGUMENT);
@@ -1683,7 +1677,7 @@ rmw_ret_t __rmw_take_one(rmw_zenoh_cpp::rmw_subscription_data_t *sub_data,
 
   return RMW_RET_OK;
 }
-} // namespace
+}  // namespace
 
 //==============================================================================
 /// Take an incoming ROS message.
@@ -1865,7 +1859,7 @@ rmw_ret_t __rmw_take_serialized(const rmw_subscription_t *subscription,
     rmw_ret_t ret =
         rmw_serialized_message_resize(serialized_message, payload_len);
     if (ret != RMW_RET_OK) {
-      return ret; // Error message already set
+      return ret;  // Error message already set
     }
   }
   serialized_message->buffer_length = payload_len;
@@ -1888,7 +1882,7 @@ rmw_ret_t __rmw_take_serialized(const rmw_subscription_t *subscription,
 
   return RMW_RET_OK;
 }
-} // namespace
+}  // namespace
 
 //==============================================================================
 /// Take an incoming ROS message as a byte stream.
@@ -2278,7 +2272,6 @@ rmw_ret_t rmw_destroy_client(rmw_node_t *node, rmw_client_t *client) {
 /// Send a ROS service request.
 rmw_ret_t rmw_send_request(const rmw_client_t *client, const void *ros_request,
                            int64_t *sequence_id) {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(client->data, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(ros_request, RMW_RET_INVALID_ARGUMENT);
@@ -2854,7 +2847,6 @@ rmw_ret_t rmw_destroy_service(rmw_node_t *node, rmw_service_t *service) {
 rmw_ret_t rmw_take_request(const rmw_service_t *service,
                            rmw_service_info_t *request_header,
                            void *ros_request, bool *taken) {
-
   *taken = false;
 
   RMW_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
@@ -3146,7 +3138,6 @@ rmw_trigger_guard_condition(const rmw_guard_condition_t *guard_condition) {
 /// Create a wait set to store conditions that the middleware can wait on.
 rmw_wait_set_t *rmw_create_wait_set(rmw_context_t *context,
                                     size_t max_conditions) {
-
   static_cast<void>(max_conditions);
 
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(context, NULL);
@@ -3306,7 +3297,7 @@ bool check_and_attach_condition(
 
   return false;
 }
-} // namespace
+}  // namespace
 
 //==============================================================================
 /// Waits on sets of different entities and returns when one is ready.
@@ -3315,7 +3306,6 @@ rmw_ret_t rmw_wait(rmw_subscriptions_t *subscriptions,
                    rmw_services_t *services, rmw_clients_t *clients,
                    rmw_events_t *events, rmw_wait_set_t *wait_set,
                    const rmw_time_t *wait_timeout) {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(wait_set, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(wait set handle,
                                    wait_set->implementation_identifier,
@@ -3481,7 +3471,6 @@ rmw_ret_t rmw_wait(rmw_subscriptions_t *subscriptions,
 rmw_ret_t rmw_get_node_names(const rmw_node_t *node,
                              rcutils_string_array_t *node_names,
                              rcutils_string_array_t *node_namespaces) {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(node, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context->impl, RMW_RET_INVALID_ARGUMENT);
@@ -3776,4 +3765,4 @@ rmw_ret_t rmw_client_set_on_new_response_callback(rmw_client_t *client,
   client_data->data_callback_mgr.set_callback(user_data, callback);
   return RMW_RET_OK;
 }
-} // extern "C"
+}  // extern "C"
