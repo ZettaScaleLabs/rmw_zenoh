@@ -452,8 +452,6 @@ rmw_publisher_t * rmw_create_publisher(
   const char * topic_name, const rmw_qos_profile_t * qos_profile,
   const rmw_publisher_options_t * publisher_options)
 {
-
-
   RMW_CHECK_ARGUMENT_FOR_NULL(node, nullptr);
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
     node, node->implementation_identifier,
@@ -2145,7 +2143,6 @@ rmw_client_t * rmw_create_client(
   const rmw_node_t * node, const rosidl_service_type_support_t * type_supports,
   const char * service_name, const rmw_qos_profile_t * qos_profile)
 {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(node, nullptr);
 
   RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
@@ -3819,7 +3816,6 @@ rmw_ret_t rmw_get_node_names_with_enclaves(
   const rmw_node_t * node, rcutils_string_array_t * node_names,
   rcutils_string_array_t * node_namespaces, rcutils_string_array_t * enclaves)
 {
-
   RMW_CHECK_ARGUMENT_FOR_NULL(node, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(node->context->impl, RMW_RET_INVALID_ARGUMENT);
