@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdio>
 #include <optional>
 #include <zenoh.h>
 
@@ -92,6 +93,10 @@ graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
 //==============================================================================
 /// Initialize the middleware with the given options, and yielding an context.
 rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
+<<<<<<< HEAD
+=======
+
+>>>>>>> dfc95ade620952af587dc55464d0697efad15301
   RMW_CHECK_ARGUMENT_FOR_NULL(options, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_FOR_NULL_WITH_MSG(options->implementation_identifier,
@@ -176,6 +181,10 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     return ret;
   }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> dfc95ade620952af587dc55464d0697efad15301
   // TODO(yuyuan): SHM
   z_owned_string_t shm_enabled;
   zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled);
@@ -220,6 +229,10 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     }
   }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> dfc95ade620952af587dc55464d0697efad15301
   // TODO(yuyuan): SHM
   // Initialize the shm manager if shared_memory is enabled in the config.
   if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
@@ -309,17 +322,13 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   // TODO(yuyuan): This one needs to be inifinite
   z_fifo_channel_reply_new(&closure, &handler, 100000);
 
-  // TODO(yuyuan): improve this
-  z_owned_keyexpr_t keyexpr;
-  z_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
-  // z_view_keyexpr_t keyexpr;
-  // z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
+  z_view_keyexpr_t keyexpr;
+  z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
   zc_liveliness_get(z_loan(context->impl->session), z_loan(keyexpr),
                     z_move(closure), NULL);
   z_owned_reply_t reply;
 
-
-  while (z_recv(z_loan(handler), &reply)) {
+  while (z_recv(z_loan(handler), &reply) == Z_OK) {
     if (z_reply_is_ok(z_loan(reply))) {
       const z_loaned_sample_t* sample = z_reply_ok(z_loan(reply));
       z_view_string_t key_str;
@@ -329,7 +338,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
       // query and the liveliness subscription.
       context->impl->graph_cache->parse_put(str, true);
     } else {
-      printf("[discovery] Received an error\n");
+      RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "[discovery] Received an error\n");
     }
   }
 
@@ -353,9 +362,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   z_owned_closure_sample_t callback;
   z_closure(&callback, graph_sub_data_handler, nullptr, context->impl);
 
-  // TODO(yuyuan): improve this
-  z_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
-  // z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
+  z_view_keyexpr_from_str(&keyexpr, liveliness_str.c_str());
 
   zc_liveliness_declare_subscriber(
       &context->impl->graph_subscriber,

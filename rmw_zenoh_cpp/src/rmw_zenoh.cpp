@@ -933,41 +933,6 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
                                 return RMW_RET_BAD_ALLOC);
   }
 
-  // // Get memory from SHM buffer if available.
-  // if (publisher_data->context->impl->shm_manager.has_value() &&
-  //     zc_shm_manager_check(
-  //         &publisher_data->context->impl->shm_manager.value())) {
-  //   shmbuf =
-  //   zc_shm_alloc(&publisher_data->context->impl->shm_manager.value(),
-  //                         max_data_length);
-  //   if (!z_check(shmbuf.value())) {
-  //     zc_shm_gc(&publisher_data->context->impl->shm_manager.value());
-  //     shmbuf =
-  //     zc_shm_alloc(&publisher_data->context->impl->shm_manager.value(),
-  //                           max_data_length);
-  //     if (!z_check(shmbuf.value())) {
-  //       // TODO(Yadunund): Should we revert to regular allocation and not
-  //       return
-  //       // an error?
-  //       RMW_SET_ERROR_MSG("Failed to allocate a SHM buffer, even after
-  //       GCing"); return RMW_RET_ERROR;
-  //     }
-  //   }
-  //   msg_bytes = reinterpret_cast<char *>(zc_shmbuf_ptr(&shmbuf.value()));
-  // } else {
-  //   // Get memory from the allocator.
-  //   msg_bytes = static_cast<char *>(
-  //       allocator->allocate(max_data_length, allocator->state));
-  //   RMW_CHECK_FOR_NULL_WITH_MSG(msg_bytes, "bytes for message is null",
-  //                               return RMW_RET_BAD_ALLOC);
-  // }
-
-  // // Get memory from the allocator.
-  // msg_bytes = static_cast<char *>(
-  //     allocator->allocate(max_data_length, allocator->state));
-  // RMW_CHECK_FOR_NULL_WITH_MSG(msg_bytes, "bytes for message is null",
-  //                             return RMW_RET_BAD_ALLOC);
-
   // Object that manages the raw buffer
   eprosima::fastcdr::FastBuffer fastbuffer(msg_bytes, max_data_length);
 
@@ -997,13 +962,13 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   // will be encoded with CDR so it does not really matter.
   z_publisher_put_options_t options;
   z_publisher_put_options_default(&options);
-  options.attachment = &attachment;
+  options.attachment = z_move(attachment);
 
   z_owned_bytes_t payload;
 
   // TODO(yuyuan): SHM
   if (shmbuf.has_value()) {
-    z_bytes_serialize_from_shm_mut(&payload, &shmbuf.value());
+    z_bytes_serialize_from_shm_mut(&payload, z_move(shmbuf.value()));
     z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options);
   } else {
     z_bytes_serialize_from_buf(
@@ -1122,7 +1087,7 @@ rmw_ret_t rmw_publish_serialized_message(
   // will be encoded with CDR so it does not really matter.
   z_publisher_put_options_t options;
   z_publisher_put_options_default(&options);
-  options.attachment = &attachment;
+  options.attachment = z_move(attachment);
 
   z_owned_bytes_t payload;
   z_bytes_serialize_from_buf(&payload, serialized_message->buffer, data_length);
@@ -1448,17 +1413,14 @@ rmw_subscription_t *rmw_create_subscription(
       sub_options.reliability = Z_RELIABILITY_RELIABLE;
     }
 
-    ;
-
-    ze_owned_querying_subscriber_t *sub =
-        &std::get<ze_owned_querying_subscriber_t>(sub_data->sub);
-    ze_declare_querying_subscriber(sub, z_loan(context_impl->session),
+    ze_owned_querying_subscriber_t sub;
+    if (ze_declare_querying_subscriber(&sub, z_loan(context_impl->session),
                                    z_loan(keyexpr), z_move(callback),
-                                   &sub_options);
-    if (!z_check(*sub)) {
+                                   &sub_options)) {
       RMW_SET_ERROR_MSG("unable to create zenoh subscription");
       return nullptr;
     }
+    sub_data->sub = sub;
   } else {
     // Create a regular subscriber for all other durability settings.
     z_subscriber_options_t sub_options;
@@ -1467,25 +1429,24 @@ rmw_subscription_t *rmw_create_subscription(
       sub_options.reliability = Z_RELIABILITY_RELIABLE;
     }
 
-    z_owned_subscriber_t *sub = &std::get<z_owned_subscriber_t>(sub_data->sub);
-    z_declare_subscriber(sub, z_loan(context_impl->session), z_loan(keyexpr),
-                         z_move(callback), &sub_options);
-    if (!z_check(*sub)) {
+    z_owned_subscriber_t sub;
+    if(z_declare_subscriber(&sub, z_loan(context_impl->session), z_loan(keyexpr), z_move(callback), &sub_options)) {
       RMW_SET_ERROR_MSG("unable to create zenoh subscription");
       return nullptr;
     }
+    sub_data->sub = sub;
   }
 
   auto undeclare_z_sub = rcpputils::make_scope_exit([sub_data]() {
     z_owned_subscriber_t *sub =
         std::get_if<z_owned_subscriber_t>(&sub_data->sub);
-    if (sub == nullptr || z_undeclare_subscriber(sub)) {
+    if (sub == nullptr || z_undeclare_subscriber(z_move(*sub))) {
       RMW_SET_ERROR_MSG("failed to undeclare sub");
     } else {
       ze_owned_querying_subscriber_t *querying_sub =
           std::get_if<ze_owned_querying_subscriber_t>(&sub_data->sub);
       if (querying_sub == nullptr ||
-          ze_undeclare_querying_subscriber(querying_sub)) {
+          ze_undeclare_querying_subscriber(z_move(*querying_sub))) {
         RMW_SET_ERROR_MSG("failed to undeclare sub");
       }
     }
@@ -1580,7 +1541,7 @@ rmw_ret_t rmw_destroy_subscription(rmw_node_t *node,
     z_owned_subscriber_t *sub =
         std::get_if<z_owned_subscriber_t>(&sub_data->sub);
     if (sub != nullptr) {
-      if (z_undeclare_subscriber(sub)) {
+      if (z_undeclare_subscriber(z_move(*sub))) {
         RMW_SET_ERROR_MSG("failed to undeclare sub");
         ret = RMW_RET_ERROR;
       }
@@ -1588,7 +1549,7 @@ rmw_ret_t rmw_destroy_subscription(rmw_node_t *node,
       ze_owned_querying_subscriber_t *querying_sub =
           std::get_if<ze_owned_querying_subscriber_t>(&sub_data->sub);
       if (querying_sub == nullptr ||
-          ze_undeclare_querying_subscriber(querying_sub)) {
+          ze_undeclare_querying_subscriber(z_move(*querying_sub))) {
         RMW_SET_ERROR_MSG("failed to undeclare sub");
         ret = RMW_RET_ERROR;
       }
@@ -2383,7 +2344,7 @@ rmw_ret_t rmw_send_request(const rmw_client_t *client, const void *ros_request,
   // rmw_client_data_t class for why we need to do this.
   client_data->increment_in_flight_callbacks();
 
-  opts.attachment = &attachment;
+  opts.attachment = z_move(attachment);
 
   opts.target = Z_QUERY_TARGET_ALL_COMPLETE;
   // The default timeout for a z_get query is 10 seconds and if a response is
@@ -2397,15 +2358,15 @@ rmw_ret_t rmw_send_request(const rmw_client_t *client, const void *ros_request,
   // expression, which optimizes bandwidth. The default is "None", which imples
   // replies may come in any order and any number.
   opts.consolidation = z_query_consolidation_latest();
-  z_bytes_serialize_from_buf(opts.payload,
+
+  z_owned_bytes_t payload;
+  z_bytes_serialize_from_buf(&payload,
                              reinterpret_cast<const uint8_t *>(request_bytes),
                              data_length);
+  opts.payload = z_move(payload);
 
   z_owned_closure_reply_t callback;
   z_closure(&callback, rmw_zenoh_cpp::client_data_handler, NULL, client_data);
-
-  // TODO(yuyuan):  z_owned_closure_reply_t zn_closure_reply is replaced with a
-  // moved callback
   z_get(z_loan(context_impl->session), z_loan(client_data->keyexpr), "",
         z_move(callback), &opts);
 
@@ -3045,12 +3006,14 @@ rmw_ret_t rmw_send_response(const rmw_service_t *service,
   z_query_reply_options_t options;
   z_query_reply_options_default(&options);
 
-  *options.attachment = create_map_and_set_sequence_num(
+  z_owned_bytes_t attachment = create_map_and_set_sequence_num(
       request_header->sequence_number, request_header->writer_guid);
-  if (!z_check(*options.attachment)) {
+  if (!z_check(attachment)) {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }
+  options.attachment = z_move(attachment);
+
   z_owned_bytes_t payload;
   z_bytes_serialize_from_buf(
       &payload, reinterpret_cast<const uint8_t *>(response_bytes), data_length);
