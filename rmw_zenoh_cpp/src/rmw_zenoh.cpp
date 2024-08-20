@@ -161,8 +161,10 @@ find_service_type_support(const rosidl_service_type_support_t *type_supports) {
 
 extern "C" {
 
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
 // TODO(yuyuan): SHM, make this configurable
 #define SHM_BUF_OK_SIZE 2621440
+#endif
 
 //==============================================================================
 /// Get the name of the rmw implementation being used
@@ -885,22 +887,31 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   // To store serialized message byte array.
   char *msg_bytes = nullptr;
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   std::optional<z_owned_shm_mut_t> shmbuf = std::nullopt;
   auto always_free_shmbuf = rcpputils::make_scope_exit([&shmbuf]() {
     if (shmbuf.has_value()) {
-      // TODO(yuyuan): do we need to drop z_owned_shm_mut_t?
       z_drop(z_move(shmbuf.value()));
     }
   });
+#endif
+
   auto free_msg_bytes =
-      rcpputils::make_scope_exit([&msg_bytes, allocator, &shmbuf]() {
-        if (msg_bytes && !shmbuf.has_value()) {
+      rcpputils::make_scope_exit([&msg_bytes, allocator
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+      , &shmbuf
+#endif
+      ]() {
+        if (msg_bytes
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+        && !shmbuf.has_value()
+#endif
+        ) {
           allocator->deallocate(msg_bytes, allocator->state);
         }
       });
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   // Get memory from SHM buffer if available.
   if (publisher_data->context->impl->shm_provider.has_value()) {
     // printf(">>> rmw_publish(), SHM enabled\n");
@@ -923,7 +934,9 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
       return RMW_RET_ERROR;
     }
 
-  } else {
+  } else
+#endif
+  {
     // printf(">>> rmw_publish(), SHM disabled\n");
 
     // Get memory from the allocator.
@@ -966,11 +979,13 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
 
   z_owned_bytes_t payload;
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   if (shmbuf.has_value()) {
     z_bytes_serialize_from_shm_mut(&payload, z_move(shmbuf.value()));
     z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options);
-  } else {
+  } else
+#endif
+  {
     z_bytes_serialize_from_buf(
         &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length);
     if (z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options)) {

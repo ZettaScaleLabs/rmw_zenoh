@@ -41,9 +41,11 @@
 
 
 extern "C" {
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
 // Megabytes of SHM to reserve.
 // TODO(clalancette): Make this configurable, or get it from the configuration
 #define SHM_BUFFER_SIZE_MB 10
+#endif
 
 namespace
 {
@@ -177,13 +179,14 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     return ret;
   }
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   z_owned_string_t shm_enabled;
   zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled);
   auto free_shm_= rcpputils::make_scope_exit(
     [&shm_enabled]() {
       z_drop(z_move(shm_enabled));
     });
+#endif
 
   // Initialize the zenoh session.
   if(z_open(&context->impl->session, z_move(config))) {
@@ -221,7 +224,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     }
   }
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   // Initialize the shm manager if shared_memory is enabled in the config.
   if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
     printf(">>> SHM is enabled\n");
@@ -245,6 +248,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
         z_drop(z_move(context->impl->shm_provider.value()));
       }
     });
+#endif
 
   // Initialize the guard condition.
   context->impl->graph_guard_condition =
@@ -380,7 +384,9 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   free_options.cancel();
   impl_destructor.cancel();
   free_impl.cancel();
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   free_shm_provider.cancel();
+#endif
   restore_context.cancel();
 
   return RMW_RET_OK;
@@ -397,9 +403,12 @@ rmw_ret_t rmw_shutdown(rmw_context_t *context) {
                                    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
 
   z_undeclare_subscriber(z_move(context->impl->graph_subscriber));
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  // Drop SHM provider
   if (context->impl->shm_provider.has_value()) {
     z_drop(z_move(context->impl->shm_provider.value()));
   }
+#endif
   // Close the zenoh session
   if (z_close(z_move(context->impl->session)) < 0) {
     RMW_SET_ERROR_MSG("Error while closing zenoh session");

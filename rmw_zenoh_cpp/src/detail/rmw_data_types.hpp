@@ -52,8 +52,9 @@ public:
   // An owned session.
   z_owned_session_t session;
 
-  // TODO(yuyuan): SHM
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   std::optional<z_owned_shm_provider_t> shm_provider;
+#endif
 
   z_owned_subscriber_t graph_subscriber;
 
