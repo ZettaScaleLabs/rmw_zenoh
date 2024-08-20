@@ -93,10 +93,6 @@ graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
 //==============================================================================
 /// Initialize the middleware with the given options, and yielding an context.
 rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
-<<<<<<< HEAD
-=======
-
->>>>>>> dfc95ade620952af587dc55464d0697efad15301
   RMW_CHECK_ARGUMENT_FOR_NULL(options, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_ARGUMENT_FOR_NULL(context, RMW_RET_INVALID_ARGUMENT);
   RMW_CHECK_FOR_NULL_WITH_MSG(options->implementation_identifier,
@@ -181,10 +177,6 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     return ret;
   }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> dfc95ade620952af587dc55464d0697efad15301
   // TODO(yuyuan): SHM
   z_owned_string_t shm_enabled;
   zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled);
@@ -229,10 +221,6 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     }
   }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> dfc95ade620952af587dc55464d0697efad15301
   // TODO(yuyuan): SHM
   // Initialize the shm manager if shared_memory is enabled in the config.
   if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
@@ -381,8 +369,6 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     RMW_SET_ERROR_MSG("unable to create zenoh subscription");
     return RMW_RET_ERROR;
   }
-
-  z_drop(z_move(keyexpr));
 
   undeclare_z_sub.cancel();
   close_session.cancel();
