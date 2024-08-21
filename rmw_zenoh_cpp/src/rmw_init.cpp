@@ -41,11 +41,6 @@
 
 
 extern "C" {
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-// Megabytes of SHM to reserve.
-// TODO(clalancette): Make this configurable, or get it from the configuration
-#define SHM_BUFFER_SIZE_MB 10
-#endif
 
 namespace
 {
@@ -232,7 +227,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     // TODO(yuyuan): determine the default alignment
     z_alloc_alignment_t alignment = {5};
     z_owned_memory_layout_t layout;
-    z_memory_layout_new(&layout, SHM_BUFFER_SIZE_MB * 1024 * 1024, alignment);
+    z_memory_layout_new(&layout, rmw_zenoh_cpp::zenoh_shm_alloc_size(), alignment);
 
     z_owned_shm_provider_t provider;
     if (z_posix_shm_provider_new(&provider, z_loan(layout))) {
