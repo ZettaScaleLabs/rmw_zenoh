@@ -47,7 +47,8 @@ NodeInfo::NodeInfo(
   // Do nothing.
 }
 
-namespace {
+namespace
+{
 // Helper function to create a copy of a string after removing any
 // leading or trailing slashes.
 std::string strip_slashes(const std::string & str)
@@ -63,7 +64,7 @@ std::string strip_slashes(const std::string & str)
   }
   return ret.substr(start, end - start + 1);
 }
-}  // namespace anonymous
+}  // namespace
 ///=============================================================================
 TopicInfo::TopicInfo(
   std::size_t domain_id,
