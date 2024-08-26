@@ -160,11 +160,6 @@ find_service_type_support(const rosidl_service_type_support_t *type_supports) {
 
 extern "C" {
 
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-// TODO(yuyuan): SHM, make this configurable
-#define SHM_BUF_OK_SIZE 2621440
-#endif
-
 //==============================================================================
 /// Get the name of the rmw implementation being used
 const char *rmw_get_implementation_identifier(void) {
@@ -904,13 +899,15 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   if (publisher_data->context->impl->shm_provider.has_value()) {
     // printf(">>> rmw_publish(), SHM enabled\n");
 
-    auto provider = publisher_data->context->impl->shm_provider.value();
+    const auto& provider = publisher_data->context->impl->shm_provider.value();
+    
+    // Allocate SHM bufer
+    // We use 1-byte alignment
     z_buf_layout_alloc_result_t alloc;
-    // TODO(yuyuan): SHM, configure this
-    z_alloc_alignment_t alignment = {5};
+    z_alloc_alignment_t alignment = {0};
     z_shm_provider_alloc_gc_defrag_blocking(
         &alloc, z_loan(provider),
-        SHM_BUF_OK_SIZE, alignment);
+        max_data_length, alignment);
 
     if (alloc.status == ZC_BUF_LAYOUT_ALLOC_STATUS_OK) {
       shmbuf = std::make_optional(alloc.buf);
@@ -957,6 +954,26 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   auto free_attachment = rcpputils::make_scope_exit(
       [&attachment]() { z_drop(z_move(attachment)); });
 
+  z_owned_bytes_t payload;
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  if (shmbuf.has_value()) {
+    if (z_bytes_serialize_from_shm_mut(&payload, z_move(shmbuf.value())) != Z_OK) {
+      RMW_SET_ERROR_MSG("unable to serialize SHM buffer into Zenoh Payload");
+      return RMW_RET_ERROR;
+    }
+  } else
+#endif
+  {
+    if (z_bytes_serialize_from_buf(
+        &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length) != Z_OK) {
+      RMW_SET_ERROR_MSG("unable to serialize raw buffer into Zenoh Payload");
+      return RMW_RET_ERROR;
+    }
+  }
+
+  // we cancel free attachment because attachment will be moved into z_publisher_put_options_t
+  free_attachment.cancel();
+
   // The encoding is simply forwarded and is useful when key expressions in the
   // session use different encoding formats. In our case, all key expressions
   // will be encoded with CDR so it does not really matter.
@@ -964,21 +981,9 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   z_publisher_put_options_default(&options);
   options.attachment = z_move(attachment);
 
-  z_owned_bytes_t payload;
-
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  if (shmbuf.has_value()) {
-    z_bytes_serialize_from_shm_mut(&payload, z_move(shmbuf.value()));
-    z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options);
-  } else
-#endif
-  {
-    z_bytes_serialize_from_buf(
-        &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length);
-    if (z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options)) {
-      RMW_SET_ERROR_MSG("unable to publish message");
-      return RMW_RET_ERROR;
-    }
+  if (z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options) != Z_OK) {
+    RMW_SET_ERROR_MSG("unable to publish message");
+    return RMW_RET_ERROR;
   }
 
   return RMW_RET_OK;

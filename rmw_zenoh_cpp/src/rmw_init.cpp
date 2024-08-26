@@ -224,16 +224,25 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
     printf(">>> SHM is enabled\n");
 
-    // TODO(yuyuan): determine the default alignment
-    z_alloc_alignment_t alignment = {5};
+    // Create Layout for provider's memory
+    // Provider's alignment will be 1 byte as we are going to make only 1-byte aligned allocations
+    z_alloc_alignment_t alignment = {0};
     z_owned_memory_layout_t layout;
-    z_memory_layout_new(&layout, rmw_zenoh_cpp::zenoh_shm_alloc_size(), alignment);
+    if(z_memory_layout_new(&layout, rmw_zenoh_cpp::zenoh_shm_alloc_size(), alignment) != Z_OK) {
+      RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "Unable to create a Layout for SHM provider.");
+      return RMW_RET_ERROR;
+    }
 
+    // Create SHM provider
     z_owned_shm_provider_t provider;
-    if (z_posix_shm_provider_new(&provider, z_loan(layout))) {
+    const auto provider_creation_result = z_posix_shm_provider_new(&provider, z_loan(layout));
+    z_drop(layout);
+    if (provider_creation_result != Z_OK) {
       RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "Unable to create a SHM provider.");
       return RMW_RET_ERROR;
     }
+
+    // Upon successful provider creation, store it in the context
     context->impl->shm_provider = std::make_optional(provider);
   }
 
