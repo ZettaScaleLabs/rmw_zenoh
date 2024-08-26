@@ -311,7 +311,7 @@ rmw_node_t *rmw_create_node(rmw_context_t *context, const char *name,
 
   auto free_token = rcpputils::make_scope_exit(
       [node_data]() { z_drop(z_move(node_data->token)); });
-  if (!z_check(node_data->token)) {
+  if (!z_internal_check(node_data->token)) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp", "Unable to create liveliness token for the node.");
     return nullptr;
@@ -476,7 +476,7 @@ rmw_publisher_t *rmw_create_publisher(
                               return nullptr);
   RMW_CHECK_FOR_NULL_WITH_MSG(context_impl->enclave,
                               "expected initialized enclave", return nullptr);
-  if (!z_check(context_impl->session)) {
+  if (!z_internal_check(context_impl->session)) {
     RMW_SET_ERROR_MSG("zenoh session is invalid");
     return nullptr;
   }
@@ -587,7 +587,7 @@ rmw_publisher_t *rmw_create_publisher(
   z_keyexpr_as_view_string(z_loan(keyexpr), &str);
   auto always_free_ros_keyexpr = rcpputils::make_scope_exit(
       [&keyexpr]() { z_keyexpr_drop(z_move(keyexpr)); });
-  if (!z_keyexpr_check(&keyexpr)) {
+  if (!z_internal_keyexpr_check(&keyexpr)) {
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr.");
     return nullptr;
   }
@@ -817,7 +817,7 @@ create_map_and_set_sequence_num(int64_t sequence_number,
   // if (rcutils_snprintf(seq_id_str, sizeof(seq_id_str), "%" PRId64,
   //                      sequence_number) < 0) {
   //   RMW_SET_ERROR_MSG("failed to print sequence_number into buffer");
-  //   z_bytes_null(&bytes);
+  //   z_internal_bytes_null(&bytes);
   //   return bytes;
   // }
 
@@ -835,7 +835,7 @@ create_map_and_set_sequence_num(int64_t sequence_number,
   // if (rcutils_snprintf(source_ts_str, sizeof(source_ts_str), "%" PRId64,
   //                      now_ns.count()) < 0) {
   //   RMW_SET_ERROR_MSG("failed to print sequence_number into buffer");
-  //   z_bytes_null(&bytes);
+  //   z_internal_bytes_null(&bytes);
   //   return bytes;
   // }
 
@@ -848,7 +848,7 @@ create_map_and_set_sequence_num(int64_t sequence_number,
   if (data.serialize_to_zbytes(&bytes)) {
     RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp",
                               "Failed to serialize the attachment");
-    z_bytes_null(&bytes);
+    z_internal_bytes_null(&bytes);
     return bytes;
   }
 
@@ -916,7 +916,7 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
         &alloc, z_loan(provider),
         SHM_BUF_OK_SIZE, alignment);
 
-    if (z_check(alloc.buf)) {
+    if (z_internal_check(alloc.buf)) {
       shmbuf = std::make_optional(alloc.buf);
       msg_bytes =
           reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
@@ -953,7 +953,7 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
 
   z_owned_bytes_t attachment =
       create_map_and_set_sequence_num(sequence_number, publisher_data->pub_gid);
-  if (!z_check(attachment)) {
+  if (!z_internal_check(attachment)) {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }
@@ -1076,7 +1076,7 @@ rmw_ret_t rmw_publish_serialized_message(
   z_owned_bytes_t attachment =
       create_map_and_set_sequence_num(sequence_number, publisher_data->pub_gid);
 
-  if (!z_check(attachment)) {
+  if (!z_internal_check(attachment)) {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }
@@ -1126,7 +1126,7 @@ rmw_ret_t rmw_publisher_assert_liveliness(const rmw_publisher_t *publisher) {
       static_cast<rmw_zenoh_cpp::rmw_publisher_data_t *>(publisher->data);
   RMW_CHECK_ARGUMENT_FOR_NULL(pub_data, RMW_RET_INVALID_ARGUMENT);
 
-  if (!zc_liveliness_token_check(&pub_data->token)) {
+  if (!zc_internal_liveliness_token_check(&pub_data->token)) {
     return RMW_RET_ERROR;
   }
 
@@ -1275,7 +1275,7 @@ rmw_subscription_t *rmw_create_subscription(
                               return nullptr);
   RMW_CHECK_FOR_NULL_WITH_MSG(context_impl->enclave,
                               "expected initialized enclave", return nullptr);
-  if (!z_check(context_impl->session)) {
+  if (!z_internal_check(context_impl->session)) {
     RMW_SET_ERROR_MSG("zenoh session is invalid");
     return nullptr;
   }
@@ -1387,7 +1387,7 @@ rmw_subscription_t *rmw_create_subscription(
       sub_data->type_support->get_name(), type_hash_c_str);
   auto always_free_ros_keyexpr = rcpputils::make_scope_exit(
       [&keyexpr]() { z_keyexpr_drop(z_move(keyexpr)); });
-  if (!z_keyexpr_check(&keyexpr)) {
+  if (!z_internal_keyexpr_check(&keyexpr)) {
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr.");
     return nullptr;
   }
@@ -1491,7 +1491,7 @@ rmw_subscription_t *rmw_create_subscription(
       z_drop(z_move(sub_data->token));
     }
   });
-  if (!z_check(sub_data->token)) {
+  if (!z_internal_check(sub_data->token)) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp",
         "Unable to create liveliness token for the subscription.");
@@ -1981,7 +1981,7 @@ rmw_client_t *rmw_create_client(
                               return nullptr);
   RMW_CHECK_FOR_NULL_WITH_MSG(context_impl->enclave,
                               "expected initialized enclave", return nullptr);
-  if (!z_check(context_impl->session)) {
+  if (!z_internal_check(context_impl->session)) {
     RMW_SET_ERROR_MSG("zenoh session is invalid");
     return nullptr;
   }
@@ -2160,7 +2160,7 @@ rmw_client_t *rmw_create_client(
       service_type.c_str(), type_hash_c_str);
   auto free_ros_keyexpr = rcpputils::make_scope_exit(
       [client_data]() { z_keyexpr_drop(z_move(client_data->keyexpr)); });
-  if (!z_keyexpr_check(&client_data->keyexpr)) {
+  if (!z_internal_keyexpr_check(&client_data->keyexpr)) {
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr.");
     return nullptr;
   }
@@ -2198,7 +2198,7 @@ rmw_client_t *rmw_create_client(
       z_drop(z_move(client_data->token));
     }
   });
-  if (!z_check(client_data->token)) {
+  if (!z_internal_check(client_data->token)) {
     RMW_ZENOH_LOG_ERROR_NAMED(
         "rmw_zenoh_cpp", "Unable to create liveliness token for the client.");
     return nullptr;
@@ -2336,7 +2336,7 @@ rmw_ret_t rmw_send_request(const rmw_client_t *client, const void *ros_request,
 
   z_owned_bytes_t attachment =
       create_map_and_set_sequence_num(*sequence_id, client_data->client_gid);
-  if (!z_check(attachment)) {
+  if (!z_internal_check(attachment)) {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }
@@ -2550,7 +2550,7 @@ rmw_service_t *rmw_create_service(
                               return nullptr);
   RMW_CHECK_FOR_NULL_WITH_MSG(context_impl->enclave,
                               "expected initialized enclave", return nullptr);
-  if (!z_check(context_impl->session)) {
+  if (!z_internal_check(context_impl->session)) {
     RMW_SET_ERROR_MSG("zenoh session is invalid");
     return nullptr;
   }
@@ -2707,7 +2707,7 @@ rmw_service_t *rmw_create_service(
     }
   });
 
-  if (!z_keyexpr_check(&service_data->keyexpr)) {
+  if (!z_internal_keyexpr_check(&service_data->keyexpr)) {
     RMW_SET_ERROR_MSG("unable to create zenoh keyexpr.");
     return nullptr;
   }
@@ -3011,7 +3011,7 @@ rmw_ret_t rmw_send_response(const rmw_service_t *service,
 
   z_owned_bytes_t attachment = create_map_and_set_sequence_num(
       request_header->sequence_number, request_header->writer_guid);
-  if (!z_check(attachment)) {
+  if (!z_internal_check(attachment)) {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }

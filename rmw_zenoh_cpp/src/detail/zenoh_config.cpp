@@ -68,7 +68,7 @@ rmw_ret_t _get_z_config(
     configured_uri = default_uri;
   }
   // Verify that the configuration is valid.
-  if (!z_config_check(config)) {
+  if (!z_internal_config_check(config)) {
     RMW_ZENOH_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",
       "Invalid configuration file %s", configured_uri);

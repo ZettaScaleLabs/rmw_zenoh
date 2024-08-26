@@ -548,7 +548,7 @@ void client_data_handler(const z_loaned_reply_t *reply, void *data) {
   z_owned_reply_t owned_reply;
   z_reply_clone(&owned_reply, reply);
 
-  if (!z_reply_check(&owned_reply)) {
+  if (!z_internal_reply_check(&owned_reply)) {
     RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "z_reply_check returned False");
     return;
   }

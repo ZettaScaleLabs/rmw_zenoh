@@ -368,7 +368,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   auto undeclare_z_sub = rcpputils::make_scope_exit([context]() {
     z_undeclare_subscriber(z_move(context->impl->graph_subscriber));
   });
-  if (!z_check(context->impl->graph_subscriber)) {
+  if (!z_internal_check(context->impl->graph_subscriber)) {
     RMW_SET_ERROR_MSG("unable to create zenoh subscription");
     return RMW_RET_ERROR;
   }
