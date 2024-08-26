@@ -896,10 +896,11 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
 
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   // Get memory from SHM buffer if available.
-  if (publisher_data->context->impl->shm_provider.has_value()) {
-    // printf(">>> rmw_publish(), SHM enabled\n");
+  if (publisher_data->context->impl->shm.has_value() &&
+      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length) {
+    // printf(">>> rmw_publish(), Will use SHM\n");
 
-    const auto& provider = publisher_data->context->impl->shm_provider.value();
+    const auto& provider = publisher_data->context->impl->shm.value().shm_provider;
     
     // Allocate SHM bufer
     // We use 1-byte alignment
@@ -922,7 +923,7 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
   } else
 #endif
   {
-    // printf(">>> rmw_publish(), SHM disabled\n");
+    // printf(">>> rmw_publish(), Will use RAW\n");
 
     // Get memory from the allocator.
     msg_bytes = static_cast<char *>(

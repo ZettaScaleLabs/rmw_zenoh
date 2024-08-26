@@ -67,6 +67,15 @@ std::optional<uint64_t> zenoh_router_check_attempts();
 ///   - Else value of environemnt variable is returned.
 /// @return The amount of shared memory to be pre-allocated for Zenoh SHM operation
 size_t zenoh_shm_alloc_size();
+///=============================================================================
+/// Message size threshold for implicit SHM optimization based on the environment
+/// variable ZENOH_SHM_ALLOC_SIZE.
+/// Messages smaller than this threshold will not be forwarded through Zenoh SHM
+/// @details The behavior is as follows:
+///   - If not set or <= 0, the default value of 2KB is returned.
+///   - Else value of environemnt variable is returned.
+/// @return The amount of shared memory to be pre-allocated for Zenoh SHM operation
+size_t zenoh_shm_message_size_threshold();
 #endif
 }  // namespace rmw_zenoh_cpp
 

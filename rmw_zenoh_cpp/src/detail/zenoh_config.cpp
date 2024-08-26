@@ -45,6 +45,8 @@ static const char * router_check_attempts_envar = "ZENOH_ROUTER_CHECK_ATTEMPTS";
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
 static const char * zenoh_shm_alloc_size_envar = "ZENOH_SHM_ALLOC_SIZE";
 static const size_t zenoh_shm_alloc_size_default = 1024*1024;
+static const char * zenoh_shm_message_size_threshold_envar = "ZENOH_SHM_MESSAGE_SIZE_THRESHOLD";
+static const size_t zenoh_shm_message_size_threshold_default = 2*1024;
 #endif
 
 rmw_ret_t _get_z_config(
@@ -156,6 +158,33 @@ size_t zenoh_shm_alloc_size() {
   }
 
   return zenoh_shm_alloc_size_default;
+}
+///=============================================================================
+size_t zenoh_shm_message_size_threshold() {
+  const char * envar_value;
+
+  if (NULL != rcutils_get_env(zenoh_shm_message_size_threshold_envar, &envar_value)) {
+    RMW_ZENOH_LOG_ERROR_NAMED(
+      "rmw_zenoh_cpp", "Envar %s cannot be read. Report this bug.",
+      zenoh_shm_message_size_threshold_envar);
+    return zenoh_shm_message_size_threshold_default;
+  }
+  
+  // If the environment variable contains a value, handle it accordingly.
+  if (envar_value[0] != '\0') {
+    const auto read_value = std::strtoull(envar_value, nullptr, 10);
+    if (read_value > 0) {
+      if (read_value > std::numeric_limits<size_t>::max()) {
+        RMW_ZENOH_LOG_ERROR_NAMED(
+          "rmw_zenoh_cpp", "Envar %s: value is too large!",
+          zenoh_shm_message_size_threshold_envar);
+      } else {
+        return read_value;
+      }
+    }
+  }
+
+  return zenoh_shm_message_size_threshold_default;
 }
 #endif
 }  // namespace rmw_zenoh_cpp

@@ -224,6 +224,11 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
     printf(">>> SHM is enabled\n");
 
+    rmw_context_impl_s::rmw_shm_s shm;
+
+    // Read msg size treshold from config
+    shm.msgsize_threshold = rmw_zenoh_cpp::zenoh_shm_message_size_threshold();
+
     // Create Layout for provider's memory
     // Provider's alignment will be 1 byte as we are going to make only 1-byte aligned allocations
     z_alloc_alignment_t alignment = {0};
@@ -234,22 +239,21 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     }
 
     // Create SHM provider
-    z_owned_shm_provider_t provider;
-    const auto provider_creation_result = z_posix_shm_provider_new(&provider, z_loan(layout));
-    z_drop(layout);
+    const auto provider_creation_result = z_posix_shm_provider_new(&shm.shm_provider, z_loan(layout));
+    z_drop(z_move(layout));
     if (provider_creation_result != Z_OK) {
       RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "Unable to create a SHM provider.");
       return RMW_RET_ERROR;
     }
 
     // Upon successful provider creation, store it in the context
-    context->impl->shm_provider = std::make_optional(provider);
+    context->impl->shm = std::make_optional(shm);
   }
 
   auto free_shm_provider = rcpputils::make_scope_exit(
     [context]() {
-      if (context->impl->shm_provider.has_value()) {
-        z_drop(z_move(context->impl->shm_provider.value()));
+      if (context->impl->shm.has_value()) {
+        z_drop(z_move(context->impl->shm.value().shm_provider));
       }
     });
 #endif
@@ -398,8 +402,8 @@ rmw_ret_t rmw_shutdown(rmw_context_t *context) {
   z_undeclare_subscriber(z_move(context->impl->graph_subscriber));
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   // Drop SHM provider
-  if (context->impl->shm_provider.has_value()) {
-    z_drop(z_move(context->impl->shm_provider.value()));
+  if (context->impl->shm.has_value()) {
+    z_drop(z_move(context->impl->shm.value().shm_provider));
   }
 #endif
   // Close the zenoh session
