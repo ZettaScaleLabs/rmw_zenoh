@@ -25,7 +25,7 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=zenoh/shared
 # - https://github.com/eclipse-zenoh/zenoh/pull/1150 (fix deadlock issue https://github.com/ros2/rmw_zenoh/issues/182)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/ZettaScaleLabs/zenoh-c
-  VCS_VERSION d4df47382482b1bc7a5b64ca6879ff800779df7b
+  VCS_VERSION dda9a61d4f7a55a43c812cf6c92f54afc30b2d71
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
 )
