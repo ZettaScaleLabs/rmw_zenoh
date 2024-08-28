@@ -175,12 +175,10 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
   }
 
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  z_owned_string_t shm_enabled;
-  zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled);
-  auto free_shm_= rcpputils::make_scope_exit(
-    [&shm_enabled]() {
-      z_drop(z_move(shm_enabled));
-    });
+  z_owned_string_t shm_enabled_str;
+  zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled_str);
+  const bool shm_enabled = (strncmp(z_string_data(z_loan(shm_enabled_str)), "true", z_string_len(z_loan(shm_enabled_str))) == 0);
+  z_drop(z_move(shm_enabled_str));
 #endif
 
   // Initialize the zenoh session.
@@ -221,7 +219,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
 
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   // Initialize the shm manager if shared_memory is enabled in the config.
-  if (strncmp(z_string_data(z_loan(shm_enabled)), "true", z_string_len(z_loan(shm_enabled))) == 0) {
+  if (shm_enabled) {
     printf(">>> SHM is enabled\n");
 
     rmw_context_impl_s::rmw_shm_s shm;
@@ -248,6 +246,8 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
 
     // Upon successful provider creation, store it in the context
     context->impl->shm = std::make_optional(shm);
+  } else {
+    printf(">>> SHM is disabled\n");
   }
 
   auto free_shm_provider = rcpputils::make_scope_exit(

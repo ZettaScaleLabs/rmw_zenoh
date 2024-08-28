@@ -232,7 +232,7 @@
     },
     /// Shared memory configuration
     shared_memory: {
-      enabled: false,
+      enabled: true,
     },
     /// Access control configuration
     auth: {
