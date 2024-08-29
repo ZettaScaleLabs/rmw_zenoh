@@ -21,7 +21,7 @@ find_package(rcutils REQUIRED)
 find_package(rosidl_typesupport_fastrtps_c REQUIRED)
 find_package(rosidl_typesupport_fastrtps_cpp REQUIRED)
 find_package(rmw REQUIRED)
-find_package(zenoh_c_vendor REQUIRED)
+find_package(zenoh_cpp_vendor REQUIRED)
 
 add_library(rmw_zenoh_cpp SHARED
   src/detail/attachment_helpers.cpp
@@ -62,6 +62,7 @@ target_link_libraries(rmw_zenoh_cpp
     rosidl_typesupport_fastrtps_cpp::rosidl_typesupport_fastrtps_cpp
     rmw::rmw
     zenohc::lib
+    zenohcxx::zenohc
 )
 
 configure_rmw_library(rmw_zenoh_cpp)
@@ -123,6 +124,7 @@ target_link_libraries(rmw_zenohd
     rcpputils::rcpputils
     rmw::rmw
     zenohc::lib
+    zenohcxx::zenohc
 )
 
 install(

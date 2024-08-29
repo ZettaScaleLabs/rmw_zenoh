@@ -14,7 +14,7 @@
 
 #include <cstdio>
 #include <optional>
-#include <zenoh.h>
+#include <zenoh.hxx>
 
 #include <new>
 #include <string>

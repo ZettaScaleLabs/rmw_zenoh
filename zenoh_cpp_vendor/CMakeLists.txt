@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(zenoh_c_vendor)
+project(zenoh_cpp_vendor)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
@@ -32,5 +32,16 @@ ament_vendor(zenoh_c_vendor
 )
 
 ament_export_dependencies(zenohc)
+
+ament_vendor(zenoh_cpp_vendor
+  VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
+  VCS_VERSION dev/1.0.0
+  CMAKE_ARGS
+    -DZENOHCXX_ZENOHC=OFF
+)
+
+externalproject_add_stepdependencies(zenoh_cpp_vendor configure zenoh_c_vendor)
+
+ament_export_dependencies(zenohcxx)
 
 ament_package()
