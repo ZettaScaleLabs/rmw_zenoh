@@ -35,4 +35,6 @@ ament_vendor(zenoh_c_vendor
     "-DZENOHC_CUSTOM_TARGET=${ZENOHC_CUSTOM_TARGET}"
 )
 
+ament_export_dependencies(zenohc)
+
 ament_package()
