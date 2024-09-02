@@ -27,7 +27,7 @@ set(RMW_ZENOH_BUILD_WITH_SHARED_MEMORY OFF CACHE BOOL "Compile Zenoh RMW with Sh
 # - https://github.com/eclipse-zenoh/zenoh/pull/1150 (fix deadlock issue https://github.com/ros2/rmw_zenoh/issues/182)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-c
-  VCS_VERSION dev/1.0.0
+  VCS_VERSION main
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_SHARED_MEMORY=${RMW_ZENOH_BUILD_WITH_SHARED_MEMORY}"
