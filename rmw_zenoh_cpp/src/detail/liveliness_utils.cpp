@@ -13,21 +13,17 @@
 // limitations under the License.
 
 #include "liveliness_utils.hpp"
+#include <zenoh.h>
 
 #include <functional>
-#include <iomanip>
 #include <optional>
-#include <sstream>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "logging_macros.hpp"
 #include "qos.hpp"
-
-#include "rcpputils/scope_exit.hpp"
 
 #include "rmw/error_handling.h"
 
@@ -49,8 +45,27 @@ NodeInfo::NodeInfo(
   // Do nothing.
 }
 
+namespace
+{
+// Helper function to create a copy of a string after removing any
+// leading or trailing slashes.
+std::string strip_slashes(const std::string & str)
+{
+  std::string ret = str;
+  std::size_t start = 0;
+  std::size_t end = str.length() - 1;
+  if (str[0] == '/') {
+    ++start;
+  }
+  if (str[end] == '/') {
+    --end;
+  }
+  return ret.substr(start, end - start + 1);
+}
+}  // namespace
 ///=============================================================================
 TopicInfo::TopicInfo(
+  std::size_t domain_id,
   std::string name,
   std::string type,
   std::string type_hash,
@@ -60,7 +75,13 @@ TopicInfo::TopicInfo(
   type_hash_(std::move(type_hash)),
   qos_(std::move(qos))
 {
-  // Do nothing.
+  topic_keyexpr_ = std::to_string(domain_id);
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += strip_slashes(name_);
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += type_;
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += type_hash_;
 }
 
 ///=============================================================================
@@ -346,11 +367,11 @@ std::optional<rmw_qos_profile_t> keyexpr_to_qos(const std::string & keyexpr)
 ///=============================================================================
 std::string zid_to_str(const z_id_t & id)
 {
-  std::ostringstream oss;
-  for (int i = sizeof(id.id) - 1; i >= 0; i--) {
-      oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(id.id[i]);
-  }
-  return oss.str();
+  z_owned_string_t z_str;
+  z_id_to_string(&id, &z_str);
+  std::string str(z_string_data(z_loan(z_str)), z_string_len(z_loan(z_str)));
+  z_drop(z_move(z_str));
+  return str;
 }
 
 ///=============================================================================
@@ -400,7 +421,7 @@ Entity::Entity(
   for (std::size_t i = 0; i < KEYEXPR_INDEX_MAX + 1; ++i) {
     bool last = false;
     if (!keyexpr_parts[i].empty()) {
-      this->keyexpr_ += std::move(keyexpr_parts[i]);
+      this->liveliness_keyexpr_ += std::move(keyexpr_parts[i]);
     }
     if (i == KEYEXPR_INDEX_MAX || keyexpr_parts[i + 1].empty()) {
       last = true;
@@ -409,9 +430,9 @@ Entity::Entity(
       break;
     }
     // Append the delimiter unless it is the last component.
-    this->keyexpr_ += KEYEXPR_DELIMITER;
+    this->liveliness_keyexpr_ += KEYEXPR_DELIMITER;
   }
-  this->guid_ = std::hash<std::string>{}(this->keyexpr_);
+  this->guid_ = std::hash<std::string>{}(this->liveliness_keyexpr_);
 }
 
 ///=============================================================================
@@ -518,6 +539,7 @@ std::shared_ptr<Entity> Entity::make(const std::string & keyexpr)
       return nullptr;
     }
     topic_info = TopicInfo{
+      domain_id,
       demangle_name(std::move(parts[KeyexprIndex::TopicName])),
       demangle_name(std::move(parts[KeyexprIndex::TopicType])),
       demangle_name(std::move(parts[KeyexprIndex::TopicTypeHash])),
@@ -587,9 +609,9 @@ std::optional<TopicInfo> Entity::topic_info() const
 }
 
 ///=============================================================================
-std::string Entity::keyexpr() const
+std::string Entity::liveliness_keyexpr() const
 {
-  return this->keyexpr_;
+  return this->liveliness_keyexpr_;
 }
 
 ///=============================================================================
