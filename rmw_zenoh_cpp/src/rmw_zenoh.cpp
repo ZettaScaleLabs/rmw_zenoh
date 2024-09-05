@@ -839,26 +839,47 @@ create_map_and_set_sequence_num(z_owned_bytes_t* out_bytes,
 }
 } // namespace
 
-size_t serialize_into(
-      char *buffer,
-      size_t size,
-      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      const void *ros_message) {
-  // Object that manages the raw buffer
-  eprosima::fastcdr::FastBuffer fastbuffer(buffer, size);
+struct RosMsgSerializer {
+  static size_t serialize_into(
+        char *buffer,
+        size_t size,
+        rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+        const void *ros_message) {
+    // Object that manages the raw buffer
+    eprosima::fastcdr::FastBuffer fastbuffer(buffer, size);
 
-  // Object that serializes the data
-  rmw_zenoh_cpp::Cdr ser(fastbuffer);
-  
-  // Serialize message
-  if (!publisher_data->type_support->serialize_ros_message(
-          ros_message, ser.get_cdr(), publisher_data->type_support_impl)) {
-    RMW_SET_ERROR_MSG("could not serialize ROS message");
-    return 0;
+    // Object that serializes the data
+    rmw_zenoh_cpp::Cdr ser(fastbuffer);
+    
+    // Serialize message
+    if (!publisher_data->type_support->serialize_ros_message(
+            ros_message, ser.get_cdr(), publisher_data->type_support_impl)) {
+      RMW_SET_ERROR_MSG("could not serialize ROS message");
+      return 0;
+    }
+
+    return ser.get_serialized_data_length();
   }
+};
 
-  return ser.get_serialized_data_length();
-}
+
+struct RosSerializedMsgSerializer {
+  static size_t serialize_into(
+        char *buffer,
+        size_t size,
+        rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data
+        const rmw_serialized_message_t *serialized_message,) {
+    eprosima::fastcdr::FastBuffer buffer(
+        reinterpret_cast<char *>(serialized_message->buffer),
+        serialized_message->buffer_length);
+    rmw_zenoh_cpp::Cdr ser(buffer);
+    if (!ser.get_cdr().jump(serialized_message->buffer_length)) {
+      RMW_SET_ERROR_MSG("cannot correctly set serialized buffer");
+      return RMW_RET_ERROR;
+    }
+    return ser.get_serialized_data_length();
+  }
+};
 
 rmw_ret_t publish(
       rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
@@ -893,11 +914,36 @@ rmw_ret_t publish(
   return RMW_RET_OK;
 }
 
+rmw_2_zenoh_payload alloc_payload(
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+      rmw_zenoh_cpp::rmw_publisher_data_t& publisher_data,
+#endif
+      size_t length) {
+
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  if (publisher_data.context->impl->shm.has_value() &&
+      publisher_data.context->impl->shm.value().msgsize_threshold <= max_data_length) {
+        return publish_shm(
+          publisher_data,
+          ros_message,
+          max_data_length,
+          z_loan(publisher_data->context->impl->shm.value().shm_provider));
+      } else
+#endif
+  {
+    return publish_raw(
+      publisher_data,
+      ros_message,
+      max_data_length);
+  }
+}
+
 /// Publish as RAW message.
+template<typename Tserializer, typename... SerializerArgs>
 rmw_ret_t publish_raw(
       rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      const void *ros_message,
-      size_t max_data_length) {
+      size_t max_data_length,
+      SerializerArgs... serializer_args) {
   // printf(">>> rmw_publish(), Will use RAW\n");
 
   rcutils_allocator_t *allocator =
@@ -917,7 +963,11 @@ rmw_ret_t publish_raw(
       });
 
   // Serialize message into memory
-  const size_t data_length = serialize_into(msg_bytes, max_data_length, publisher_data, ros_message);
+  const size_t data_length = Tserializer::serialize_into(
+      msg_bytes,
+      max_data_length,
+      publisher_data,
+      serializer_args...);
   // Return error upon unsuccessful serialization
   if(data_length == 0) {
     // serialize_into already set the error
@@ -936,11 +986,12 @@ rmw_ret_t publish_raw(
 
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
 /// Publish as SHM message.
+template<typename Tserializer, typename... SerializerArgs>
 rmw_ret_t publish_shm(
       rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      const void *ros_message,
       size_t max_data_length,
-      const z_loaned_shm_provider_t *provider) {
+      const z_loaned_shm_provider_t *provider,
+      SerializerArgs... serializer_args) {
   // printf(">>> rmw_publish(), Will use SHM\n");
       
   // Allocate SHM bufer
@@ -967,22 +1018,54 @@ rmw_ret_t publish_shm(
 
   // Serialize message into memory
   char* msg_bytes  = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
-  const size_t data_length = serialize_into(msg_bytes, max_data_length, publisher_data, ros_message);
+  const size_t data_length = Tserializer::serialize_into(
+      msg_bytes,
+      max_data_length,
+      publisher_data,
+      serializer_args...);
+
   // Return error upon unsuccessful serialization
   if(data_length == 0) {
     // serialize_into already set the error
     return RMW_RET_ERROR;
   }
 
+  // construct z_owned_bytes_t from SHM buffer 
   z_owned_bytes_t payload;
   if (z_bytes_serialize_from_shm_mut(&payload, z_move(alloc.buf)) != Z_OK) {
     RMW_SET_ERROR_MSG("unable to serialize SHM buffer into Zenoh Payload");
     return RMW_RET_ERROR;
   }
 
+  // publish data
   return publish(publisher_data, z_move(payload));
 }
 #endif
+
+/// Publish using raw or SHM(if applicable) buffer
+template<typename Tserializer, typename... SerializerArgs>
+rmw_ret_t publish_with_method_selection(
+      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+      size_t max_data_length,
+      SerializerArgs... serializer_args) {
+
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  if (publisher_data->context->impl->shm.has_value() &&
+      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length) {
+        return publish_shm<Tserializer, SerializerArgs>(
+          publisher_data,
+          max_data_length,
+          z_loan(publisher_data->context->impl->shm.value().shm_provider),
+          serializer_args...);
+      } else
+#endif
+  {
+    return publish_raw<Tserializer, SerializerArgs>(
+      publisher_data,
+      max_data_length,
+      serializer_args...);
+  }
+}
 
 //==============================================================================
 /// Publish a ROS message.
@@ -1003,27 +1086,15 @@ rmw_ret_t rmw_publish(const rmw_publisher_t *publisher, const void *ros_message,
       static_cast<rmw_zenoh_cpp::rmw_publisher_data_t *>(publisher->data);
   RMW_CHECK_FOR_NULL_WITH_MSG(publisher_data, "publisher_data is null",
                               return RMW_RET_INVALID_ARGUMENT);
-  // Serialize data.
+  // estimate serialized data size
   size_t max_data_length =
       publisher_data->type_support->get_estimated_serialized_size(
           ros_message, publisher_data->type_support_impl);
 
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  if (publisher_data->context->impl->shm.has_value() &&
-      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length) {
-        return publish_shm(
-          publisher_data,
-          ros_message,
-          max_data_length,
-          z_loan(publisher_data->context->impl->shm.value().shm_provider));
-      } else
-#endif
-      {
-        return publish_raw(
-          publisher_data,
-          ros_message,
-          max_data_length);
-      }
+  return publish_with_method_selection<RosMsgSerializer>(
+      publisher_data,
+      max_data_length,
+      ros_message);
 }
 
 
@@ -1115,43 +1186,10 @@ rmw_ret_t rmw_publish_serialized_message(
   RCUTILS_CHECK_FOR_NULL_WITH_MSG(
       publisher_data, "publisher data pointer is null", return RMW_RET_ERROR);
 
-  eprosima::fastcdr::FastBuffer buffer(
-      reinterpret_cast<char *>(serialized_message->buffer),
-      serialized_message->buffer_length);
-  rmw_zenoh_cpp::Cdr ser(buffer);
-  if (!ser.get_cdr().jump(serialized_message->buffer_length)) {
-    RMW_SET_ERROR_MSG("cannot correctly set serialized buffer");
-    return RMW_RET_ERROR;
-  }
-
-  uint64_t sequence_number = publisher_data->get_next_sequence_number();
-
-  z_owned_bytes_t attachment;
-  if (!create_map_and_set_sequence_num(&attachment, sequence_number, publisher_data->pub_gid)) {
-    // create_map_and_set_sequence_num already set the error
-    return RMW_RET_ERROR;
-  }
-  auto free_attachment = rcpputils::make_scope_exit(
-      [&attachment]() { z_drop(z_move(attachment)); });
-
-  const size_t data_length = ser.get_serialized_data_length();
-
-  // The encoding is simply forwarded and is useful when key expressions in the
-  // session use different encoding formats. In our case, all key expressions
-  // will be encoded with CDR so it does not really matter.
-  z_publisher_put_options_t options;
-  z_publisher_put_options_default(&options);
-  options.attachment = z_move(attachment);
-
-  z_owned_bytes_t payload;
-  z_bytes_serialize_from_buf(&payload, serialized_message->buffer, data_length);
-
-  if (z_publisher_put(z_loan(publisher_data->pub), z_move(payload), &options)) {
-    RMW_SET_ERROR_MSG("unable to publish message");
-    return RMW_RET_ERROR;
-  }
-
-  return RMW_RET_OK;
+  return publish_with_method_selection<RosSerializedMsgSerializer>(
+    publisher_data, 
+    serialized_message->buffer_length, 
+    serialized_message);
 }
 
 //==============================================================================
