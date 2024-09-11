@@ -111,6 +111,191 @@ find_service_type_support(const rosidl_service_type_support_t * type_supports)
   return type_support;
 }
 
+
+bool
+create_map_and_set_sequence_num(
+  z_owned_bytes_t * out_bytes,
+  int64_t sequence_number,
+  uint8_t gid[RMW_GID_STORAGE_SIZE])
+{
+  auto now = std::chrono::system_clock::now().time_since_epoch();
+  auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+  int64_t source_timestamp = now_ns.count();
+
+  rmw_zenoh_cpp::attachement_data_t data(sequence_number, source_timestamp,
+    gid);
+  if (data.serialize_to_zbytes(out_bytes)) {
+    RMW_ZENOH_LOG_ERROR_NAMED(
+      "rmw_zenoh_cpp",
+      "Failed to serialize the attachment");
+    return false;
+  }
+
+  return true;
+}
+
+rmw_ret_t publish(
+      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+      z_moved_bytes_t* payload) {
+
+  auto free_payload = rcpputils::make_scope_exit(
+      [&payload]() { z_drop(payload); });
+
+  z_owned_bytes_t attachment;
+  if (!create_map_and_set_sequence_num(
+          &attachment,
+          publisher_data->get_next_sequence_number(),
+          publisher_data->pub_gid)) {
+    // create_map_and_set_sequence_num already set the error
+    return RMW_RET_ERROR;
+  }
+
+  // The encoding is simply forwarded and is useful when key expressions in the
+  // session use different encoding formats. In our case, all key expressions
+  // will be encoded with CDR so it does not really matter.
+  z_publisher_put_options_t options;
+  z_publisher_put_options_default(&options);
+  options.attachment = z_move(attachment);
+
+  free_payload.cancel();
+
+  if (z_publisher_put(z_loan(publisher_data->pub), payload, &options) != Z_OK) {
+    RMW_SET_ERROR_MSG("unable to publish message");
+    return RMW_RET_ERROR;
+  }
+
+  return RMW_RET_OK;
+}
+
+/// Publish as RAW message.
+template<typename Tserializer, typename... SerializerArgs>
+rmw_ret_t publish_raw(
+      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+      size_t max_data_length,
+      SerializerArgs... serializer_args) {
+  // printf(">>> rmw_publish(), Will use RAW\n");
+
+  rcutils_allocator_t *allocator =
+      &(publisher_data->context->options.allocator);
+
+  // Get memory from the allocator.
+  char * msg_bytes = static_cast<char *>(
+      allocator->allocate(max_data_length, allocator->state));
+  RMW_CHECK_FOR_NULL_WITH_MSG(msg_bytes, "bytes for message is null",
+                              return RMW_RET_BAD_ALLOC);
+
+  auto free_msg_bytes =
+      rcpputils::make_scope_exit([&msg_bytes, allocator]() {
+        if (msg_bytes) {
+          allocator->deallocate(msg_bytes, allocator->state);
+        }
+      });
+
+  // Serialize message into memory
+  const size_t data_length = Tserializer::serialize_into(
+      msg_bytes,
+      max_data_length,
+      publisher_data,
+      serializer_args...);
+  // Return error upon unsuccessful serialization
+  if(data_length == 0) {
+    // serialize_into already set the error
+    return RMW_RET_ERROR;
+  }
+  
+  z_owned_bytes_t payload;
+  if (z_bytes_serialize_from_buf(
+      &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length) != Z_OK) {
+    RMW_SET_ERROR_MSG("unable to serialize raw buffer into Zenoh Payload");
+    return RMW_RET_ERROR;
+  }
+
+  return publish(publisher_data, z_move(payload));
+}
+
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+/// Publish as SHM message.
+template<typename Tserializer, typename... SerializerArgs>
+rmw_ret_t publish_shm(
+      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+      size_t max_data_length,
+      const z_loaned_shm_provider_t *provider,
+      SerializerArgs... serializer_args) {
+  // printf(">>> rmw_publish(), Will use SHM\n");
+      
+  // Allocate SHM bufer
+  // We use 1-byte alignment
+  z_buf_layout_alloc_result_t alloc;
+  {
+    z_alloc_alignment_t alignment = {0};
+    z_shm_provider_alloc_gc_defrag_blocking(
+        &alloc, provider,
+        max_data_length, alignment);
+  }
+
+  // Check allocation status
+  if (alloc.status != ZC_BUF_LAYOUT_ALLOC_STATUS_OK) {
+    RMW_ZENOH_LOG_ERROR_NAMED(
+        "rmw_zenoh_cpp", "Unexpected failure during SHM buffer allocation.");
+    return RMW_RET_ERROR;
+  }
+
+  // Cleanup SHM buffer upon scope exit
+  auto always_free_shmbuf = rcpputils::make_scope_exit([&alloc]() {
+      z_drop(z_move(alloc.buf));
+  });
+
+  // Serialize message into memory
+  char* msg_bytes  = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
+  const size_t data_length = Tserializer::serialize_into(
+      msg_bytes,
+      max_data_length,
+      publisher_data,
+      serializer_args...);
+
+  // Return error upon unsuccessful serialization
+  if(data_length == 0) {
+    // serialize_into already set the error
+    return RMW_RET_ERROR;
+  }
+
+  // construct z_owned_bytes_t from SHM buffer 
+  z_owned_bytes_t payload;
+  if (z_bytes_serialize_from_shm_mut(&payload, z_move(alloc.buf)) != Z_OK) {
+    RMW_SET_ERROR_MSG("unable to serialize SHM buffer into Zenoh Payload");
+    return RMW_RET_ERROR;
+  }
+
+  // publish data
+  return publish(publisher_data, z_move(payload));
+}
+#endif
+
+/// Publish using raw or SHM(if applicable) buffer
+template<typename Tserializer, typename... SerializerArgs>
+rmw_ret_t publish_with_method_selection(
+      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+      size_t max_data_length,
+      SerializerArgs... serializer_args) {
+
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  if (publisher_data->context->impl->shm.has_value() &&
+      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length) {
+        return publish_shm<Tserializer, SerializerArgs...>(
+          publisher_data,
+          max_data_length,
+          z_loan(publisher_data->context->impl->shm.value().shm_provider),
+          serializer_args...);
+      } else
+#endif
+  {
+    return publish_raw<Tserializer, SerializerArgs...>(
+      publisher_data,
+      max_data_length,
+      serializer_args...);
+  }
+}
+
 }  // namespace
 
 extern "C" {
@@ -806,31 +991,6 @@ rmw_return_loaned_message_from_publisher(
   return RMW_RET_UNSUPPORTED;
 }
 
-namespace
-{
-bool
-create_map_and_set_sequence_num(
-  z_owned_bytes_t * out_bytes,
-  int64_t sequence_number,
-  uint8_t gid[RMW_GID_STORAGE_SIZE])
-{
-  auto now = std::chrono::system_clock::now().time_since_epoch();
-  auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
-  int64_t source_timestamp = now_ns.count();
-
-  rmw_zenoh_cpp::attachement_data_t data(sequence_number, source_timestamp,
-    gid);
-  if (data.serialize_to_zbytes(out_bytes)) {
-    RMW_ZENOH_LOG_ERROR_NAMED(
-      "rmw_zenoh_cpp",
-      "Failed to serialize the attachment");
-    return false;
-  }
-
-  return true;
-}
-}  // namespace
-
 struct RosMsgSerializer {
   static size_t serialize_into(
         char *buffer,
@@ -857,10 +1017,10 @@ struct RosMsgSerializer {
 
 struct RosSerializedMsgSerializer {
   static size_t serialize_into(
-        char *buffer,
-        size_t size,
-        rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data
-        const rmw_serialized_message_t *serialized_message,) {
+        char *_buffer,
+        size_t _size,
+        rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+        const rmw_serialized_message_t *serialized_message) {
     eprosima::fastcdr::FastBuffer buffer(
         reinterpret_cast<char *>(serialized_message->buffer),
         serialized_message->buffer_length);
@@ -872,192 +1032,6 @@ struct RosSerializedMsgSerializer {
     return ser.get_serialized_data_length();
   }
 };
-
-rmw_ret_t publish(
-      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      z_moved_bytes_t* payload) {
-
-  auto free_payload = rcpputils::make_scope_exit(
-      [&payload]() { z_drop(payload); });
-
-  z_owned_bytes_t attachment;
-  if (!create_map_and_set_sequence_num(
-          &attachment,
-          publisher_data->get_next_sequence_number(),
-          publisher_data->pub_gid)) {
-    // create_map_and_set_sequence_num already set the error
-    return RMW_RET_ERROR;
-  }
-
-  // The encoding is simply forwarded and is useful when key expressions in the
-  // session use different encoding formats. In our case, all key expressions
-  // will be encoded with CDR so it does not really matter.
-  z_publisher_put_options_t options;
-  z_publisher_put_options_default(&options);
-  options.attachment = z_move(attachment);
-
-  free_payload.cancel();
-
-  if (z_publisher_put(z_loan(publisher_data->pub), payload, &options) != Z_OK) {
-    RMW_SET_ERROR_MSG("unable to publish message");
-    return RMW_RET_ERROR;
-  }
-
-  return RMW_RET_OK;
-}
-
-rmw_2_zenoh_payload alloc_payload(
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-      rmw_zenoh_cpp::rmw_publisher_data_t& publisher_data,
-#endif
-      size_t length) {
-
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  if (publisher_data.context->impl->shm.has_value() &&
-      publisher_data.context->impl->shm.value().msgsize_threshold <= max_data_length) {
-        return publish_shm(
-          publisher_data,
-          ros_message,
-          max_data_length,
-          z_loan(publisher_data->context->impl->shm.value().shm_provider));
-      } else
-#endif
-  {
-    return publish_raw(
-      publisher_data,
-      ros_message,
-      max_data_length);
-  }
-}
-
-/// Publish as RAW message.
-template<typename Tserializer, typename... SerializerArgs>
-rmw_ret_t publish_raw(
-      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      size_t max_data_length,
-      SerializerArgs... serializer_args) {
-  // printf(">>> rmw_publish(), Will use RAW\n");
-
-  rcutils_allocator_t *allocator =
-      &(publisher_data->context->options.allocator);
-
-  // Get memory from the allocator.
-  char * msg_bytes = static_cast<char *>(
-      allocator->allocate(max_data_length, allocator->state));
-  RMW_CHECK_FOR_NULL_WITH_MSG(msg_bytes, "bytes for message is null",
-                              return RMW_RET_BAD_ALLOC);
-
-  auto free_msg_bytes =
-      rcpputils::make_scope_exit([&msg_bytes, allocator]() {
-        if (msg_bytes) {
-          allocator->deallocate(msg_bytes, allocator->state);
-        }
-      });
-
-  // Serialize message into memory
-  const size_t data_length = Tserializer::serialize_into(
-      msg_bytes,
-      max_data_length,
-      publisher_data,
-      serializer_args...);
-  // Return error upon unsuccessful serialization
-  if(data_length == 0) {
-    // serialize_into already set the error
-    return RMW_RET_ERROR;
-  }
-  
-  z_owned_bytes_t payload;
-  if (z_bytes_serialize_from_buf(
-      &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length) != Z_OK) {
-    RMW_SET_ERROR_MSG("unable to serialize raw buffer into Zenoh Payload");
-    return RMW_RET_ERROR;
-  }
-
-  return publish(publisher_data, z_move(payload));
-}
-
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-/// Publish as SHM message.
-template<typename Tserializer, typename... SerializerArgs>
-rmw_ret_t publish_shm(
-      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      size_t max_data_length,
-      const z_loaned_shm_provider_t *provider,
-      SerializerArgs... serializer_args) {
-  // printf(">>> rmw_publish(), Will use SHM\n");
-      
-  // Allocate SHM bufer
-  // We use 1-byte alignment
-  z_buf_layout_alloc_result_t alloc;
-  {
-    z_alloc_alignment_t alignment = {0};
-    z_shm_provider_alloc_gc_defrag_blocking(
-        &alloc, provider,
-        max_data_length, alignment);
-  }
-
-  // Check allocation status
-  if (alloc.status != ZC_BUF_LAYOUT_ALLOC_STATUS_OK) {
-    RMW_ZENOH_LOG_ERROR_NAMED(
-        "rmw_zenoh_cpp", "Unexpected failure during SHM buffer allocation.");
-    return RMW_RET_ERROR;
-  }
-
-  // Cleanup SHM buffer upon scope exit
-  auto always_free_shmbuf = rcpputils::make_scope_exit([&alloc]() {
-      z_drop(z_move(alloc.buf));
-  });
-
-  // Serialize message into memory
-  char* msg_bytes  = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
-  const size_t data_length = Tserializer::serialize_into(
-      msg_bytes,
-      max_data_length,
-      publisher_data,
-      serializer_args...);
-
-  // Return error upon unsuccessful serialization
-  if(data_length == 0) {
-    // serialize_into already set the error
-    return RMW_RET_ERROR;
-  }
-
-  // construct z_owned_bytes_t from SHM buffer 
-  z_owned_bytes_t payload;
-  if (z_bytes_serialize_from_shm_mut(&payload, z_move(alloc.buf)) != Z_OK) {
-    RMW_SET_ERROR_MSG("unable to serialize SHM buffer into Zenoh Payload");
-    return RMW_RET_ERROR;
-  }
-
-  // publish data
-  return publish(publisher_data, z_move(payload));
-}
-#endif
-
-/// Publish using raw or SHM(if applicable) buffer
-template<typename Tserializer, typename... SerializerArgs>
-rmw_ret_t publish_with_method_selection(
-      rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-      size_t max_data_length,
-      SerializerArgs... serializer_args) {
-
-#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  if (publisher_data->context->impl->shm.has_value() &&
-      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length) {
-        return publish_shm<Tserializer, SerializerArgs>(
-          publisher_data,
-          max_data_length,
-          z_loan(publisher_data->context->impl->shm.value().shm_provider),
-          serializer_args...);
-      } else
-#endif
-  {
-    return publish_raw<Tserializer, SerializerArgs>(
-      publisher_data,
-      max_data_length,
-      serializer_args...);
-  }
-}
 
 //==============================================================================
 /// Publish a ROS message.
