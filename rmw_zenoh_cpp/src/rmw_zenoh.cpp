@@ -284,6 +284,9 @@ rmw_create_node(
   node->context = context;
   node->data = node_data;
 
+  // Add this node to the set of session_nodes.
+  context->impl->session_nodes_.insert(node);
+
   free_token.cancel();
   free_node_data.cancel();
   destruct_node_data.cancel();
@@ -318,6 +321,17 @@ rmw_destroy_node(rmw_node_t * node)
     zc_liveliness_undeclare_token(z_move(node_data->token));
     RMW_TRY_DESTRUCTOR(node_data->~rmw_node_data_t(), rmw_node_data_t, );
     allocator->deallocate(node_data, allocator->state);
+  }
+
+  // Erase the node from the set of session_nodes and close the Zenoh
+  // session if this is the last node.
+  node->context->impl->session_nodes_.erase(node);
+  if (node->context->impl->session_nodes_.empty()) {
+    // Close the zenoh session
+    if (z_close(z_move(node->context->impl->session), NULL) != Z_OK) {
+      RMW_SET_ERROR_MSG("Error while closing zenoh session");
+      return RMW_RET_ERROR;
+    }
   }
 
   allocator->deallocate(const_cast<char *>(node->namespace_), allocator->state);

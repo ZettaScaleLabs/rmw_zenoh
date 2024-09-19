@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -51,6 +52,12 @@ public:
 
   // An owned session.
   z_owned_session_t session;
+
+  // This is a temporary workaround for the unsoundness of rmw_shutdown
+  // reported in https://github.com/ros2/rmw_zenoh/issues/170.
+  // We keep track of all the nodes created in this session and only close
+  // the Zenoh session once the last node is destroyed.
+  std::unordered_set<const rmw_node_t *> session_nodes_;
 
   // An optional SHM provider that is initialized of SHM is enabled in the
   // zenoh session config.
