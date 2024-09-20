@@ -609,11 +609,13 @@ rmw_publisher_t *rmw_create_publisher(
   z_publisher_options_t opts;
   z_publisher_options_default(&opts);
   opts.congestion_control = Z_CONGESTION_CONTROL_DROP;
-  if (publisher_data->adapted_qos_profile.history ==
-          RMW_QOS_POLICY_HISTORY_KEEP_ALL &&
-      publisher_data->adapted_qos_profile.reliability ==
-          RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
-    opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
+    if (publisher_data->adapted_qos_profile.reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
+    opts.reliability = Z_RELIABILITY_RELIABLE;
+    if (publisher_data->adapted_qos_profile.history == RMW_QOS_POLICY_HISTORY_KEEP_ALL) {
+      opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
+    }
+  } else {
+    opts.reliability = Z_RELIABILITY_BEST_EFFORT;
   }
   // TODO(clalancette): What happens if the key name is a valid but empty
   // string?
@@ -1391,7 +1393,9 @@ rmw_subscription_t *rmw_create_subscription(
     sub_options.query_consolidation = z_query_consolidation_none();
     if (sub_data->adapted_qos_profile.reliability ==
         RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
-      sub_options.reliability = Z_RELIABILITY_RELIABLE;
+      RMW_ZENOH_LOG_WARN_NAMED(
+        "rmw_zenoh_cpp",
+        "`reliability` no longer supported on subscriber. Ignoring...");
     }
 
     ze_owned_querying_subscriber_t sub;
@@ -1406,9 +1410,6 @@ rmw_subscription_t *rmw_create_subscription(
     // Create a regular subscriber for all other durability settings.
     z_subscriber_options_t sub_options;
     z_subscriber_options_default(&sub_options);
-    if (qos_profile->reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
-      sub_options.reliability = Z_RELIABILITY_RELIABLE;
-    }
 
     z_owned_subscriber_t sub;
     if(z_declare_subscriber(&sub, z_loan(context_impl->session), z_loan(keyexpr), z_move(callback), &sub_options)) {

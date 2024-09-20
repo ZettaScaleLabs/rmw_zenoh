@@ -405,7 +405,7 @@ bool rmw_client_data_t::is_shutdown() const {
 }
 
 //==============================================================================
-void sub_data_handler(const z_loaned_sample_t *sample, void *data) {
+void sub_data_handler(z_loaned_sample_t *sample, void *data) {
   z_view_string_t keystr;
   z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
 
@@ -477,7 +477,7 @@ const z_loaned_query_t *ZenohQuery::get_query() const {
 }
 
 //==============================================================================
-void service_data_handler(const z_loaned_query_t *query, void *data) {
+void service_data_handler(z_loaned_query_t *query, void *data) {
   z_view_string_t keystr;
   z_keyexpr_as_view_string(z_query_keyexpr(query), &keystr);
 
@@ -514,7 +514,7 @@ size_t rmw_client_data_t::get_next_sequence_number() {
 }
 
 //==============================================================================
-void client_data_handler(const z_loaned_reply_t *reply, void *data) {
+void client_data_handler(z_loaned_reply_t *reply, void *data) {
   auto client_data = static_cast<rmw_client_data_t *>(data);
   if (client_data == nullptr) {
     RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp",

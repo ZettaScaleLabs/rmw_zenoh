@@ -48,7 +48,7 @@ extern "C" {
 namespace
 {
 void
-graph_sub_data_handler(const z_loaned_sample_t * sample, void * data)
+graph_sub_data_handler(z_loaned_sample_t * sample, void * data)
 {
 
   static_cast<void>(data);
@@ -188,13 +188,13 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
     });
 
   // Initialize the zenoh session.
-  if(z_open(&context->impl->session, z_move(config))) {
+  if(z_open(&context->impl->session, z_move(config), NULL)) {
     RMW_SET_ERROR_MSG("Error setting up zenoh session");
     return RMW_RET_ERROR;
   }
 
   auto close_session = rcpputils::make_scope_exit(
-      [context]() { z_close(z_move(context->impl->session)); });
+      [context]() { z_close(z_move(context->impl->session), NULL); });
 
   /// Initialize the graph cache.
   z_id_t zid = z_info_zid(z_loan(context->impl->session));
@@ -213,7 +213,7 @@ rmw_ret_t rmw_init(const rmw_init_options_t *options, rmw_context_t *context) {
                z_loan(context->impl->session))) != RMW_RET_OK) {
         ++connection_attempts;
       }
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     if (ret != RMW_RET_OK) {
       RMW_SET_ERROR_MSG_WITH_FORMAT_STRING(
@@ -393,7 +393,7 @@ rmw_ret_t rmw_shutdown(rmw_context_t *context) {
     z_drop(z_move(context->impl->shm_provider.value()));
   }
   // Close the zenoh session
-  if (z_close(z_move(context->impl->session)) < 0) {
+  if (z_close(z_move(context->impl->session), NULL) < 0) {
     RMW_SET_ERROR_MSG("Error while closing zenoh session");
     return RMW_RET_ERROR;
   }
