@@ -411,8 +411,8 @@ void GraphCache::parse_put(
   {
     auto sub_cbs_it = querying_subs_cbs_.find(entity->topic_info()->topic_keyexpr_);
     if (sub_cbs_it != querying_subs_cbs_.end()) {
-      for (const auto & cb : sub_cbs_it->second) {
-        cb(entity->zid());
+      for (auto sub_it = sub_cbs_it->second.begin(); sub_it != sub_cbs_it->second.end(); ++sub_it) {
+        sub_it->second(entity->zid());
       }
     }
   }
@@ -595,8 +595,10 @@ void GraphCache::parse_del(
       return entity->zid() == node_it.second->zid_ && entity->nid() == node_it.second->nid_;
     });
   if (node_it == range.second) {
-    // Node does not exist.
-    RMW_ZENOH_LOG_WARN_NAMED(
+    // Node does not exist or its liveliness token has been unregistered before one of its
+    // pubs/subs/service liveliness token. This could happen since Zenoh doesn't guarantee
+    // any order for unregistration events if the remote Node closed abruptly or was disconnected.
+    RMW_ZENOH_LOG_DEBUG_NAMED(
       "rmw_zenoh_cpp",
       "Received liveliness token to remove unknown node /%s from the graph. Ignoring...",
       entity->node_name().c_str()
@@ -606,16 +608,17 @@ void GraphCache::parse_del(
 
   if (entity->type() == EntityType::Node) {
     // Node
-    // The liveliness tokens to remove pub/subs should be received before the one to remove a node
-    // given the reliability QoS for liveliness subs. However, if we find any pubs/subs present in
-    // the node below, we should update the count in graph_topics_.
+    // In case the remote Node closed abruptly or was disconnected, Zenoh could deliver the
+    // liveliness tokens unregistration events in any order.
+    // If the event for Node unregistration comes before the unregistration of its
+    // pubs/subs/services, we should update the count in graph_topics_ and graph_services_.
     const GraphNodePtr graph_node = node_it->second;
     if (!graph_node->pubs_.empty() ||
       !graph_node->subs_.empty() ||
       !graph_node->clients_.empty() ||
       !graph_node->services_.empty())
     {
-      RMW_ZENOH_LOG_WARN_NAMED(
+      RMW_ZENOH_LOG_DEBUG_NAMED(
         "rmw_zenoh_cpp",
         "Received liveliness token to remove node /%s from the graph before all pub/subs/"
         "clients/services for this node have been removed. Removing all entities first...",
@@ -1331,15 +1334,29 @@ std::unique_ptr<rmw_zenoh_event_status_t> GraphCache::take_event_status(
 
 ///=============================================================================
 void GraphCache::set_querying_subscriber_callback(
-  const std::string & keyexpr,
+  const rmw_subscription_data_t * sub_data,
   QueryingSubscriberCallback cb)
 {
+  const std::string keyexpr = sub_data->entity->topic_info()->topic_keyexpr_;
   auto cb_it = querying_subs_cbs_.find(keyexpr);
   if (cb_it == querying_subs_cbs_.end()) {
-    querying_subs_cbs_[keyexpr] = std::move(std::vector<QueryingSubscriberCallback>{});
+    querying_subs_cbs_[keyexpr] = std::move(
+      std::unordered_map<const rmw_subscription_data_t *,
+      QueryingSubscriberCallback>{});
     cb_it = querying_subs_cbs_.find(keyexpr);
   }
-  cb_it->second.push_back(std::move(cb));
+  cb_it->second.insert(std::make_pair(sub_data, std::move(cb)));
+}
+
+///=============================================================================
+void GraphCache::remove_querying_subscriber_callback(
+  const rmw_subscription_data_t * sub_data)
+{
+  auto cb_map_it = querying_subs_cbs_.find(sub_data->entity->topic_info()->topic_keyexpr_);
+  if (cb_map_it == querying_subs_cbs_.end()) {
+    return;
+  }
+  cb_map_it->second.erase(sub_data);
 }
 
 }  // namespace rmw_zenoh_cpp
