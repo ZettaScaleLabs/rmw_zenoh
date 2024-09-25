@@ -287,14 +287,12 @@ rmw_ret_t publish_with_method_selection(
       max_data_length,
       z_loan(publisher_data->context->impl->shm.value().shm_provider),
       serializer_args ...);
-  } else
-#endif
-  {
-    return publish_raw<Tserializer, SerializerArgs...>(
-      publisher_data,
-      max_data_length,
-      serializer_args ...);
   }
+#endif
+  return publish_raw<Tserializer, SerializerArgs...>(
+    publisher_data,
+    max_data_length,
+    serializer_args ...);
 }
 
 }  // namespace
