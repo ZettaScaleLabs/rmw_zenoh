@@ -190,7 +190,11 @@ rmw_init(const rmw_init_options_t * options, rmw_context_t * context)
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   z_owned_string_t shm_enabled_str;
   zc_config_get_from_str(z_loan(config), Z_CONFIG_SHARED_MEMORY_KEY, &shm_enabled_str);
-  const bool shm_enabled = (strncmp(z_string_data(z_loan(shm_enabled_str)), "true", z_string_len(z_loan(shm_enabled_str))) == 0);
+  const bool shm_enabled =
+    (strncmp(
+      z_string_data(z_loan(shm_enabled_str)), "true", z_string_len(
+        z_loan(
+          shm_enabled_str))) == 0);
   z_drop(z_move(shm_enabled_str));
 #endif
 
@@ -244,13 +248,14 @@ rmw_init(const rmw_init_options_t * options, rmw_context_t * context)
     // Provider's alignment will be 1 byte as we are going to make only 1-byte aligned allocations
     z_alloc_alignment_t alignment = {0};
     z_owned_memory_layout_t layout;
-    if(z_memory_layout_new(&layout, rmw_zenoh_cpp::zenoh_shm_alloc_size(), alignment) != Z_OK) {
+    if (z_memory_layout_new(&layout, rmw_zenoh_cpp::zenoh_shm_alloc_size(), alignment) != Z_OK) {
       RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "Unable to create a Layout for SHM provider.");
       return RMW_RET_ERROR;
     }
 
     // Create SHM provider
-    const auto provider_creation_result = z_posix_shm_provider_new(&shm.shm_provider, z_loan(layout));
+    const auto provider_creation_result =
+      z_posix_shm_provider_new(&shm.shm_provider, z_loan(layout));
     z_drop(z_move(layout));
     if (provider_creation_result != Z_OK) {
       RMW_ZENOH_LOG_ERROR_NAMED("rmw_zenoh_cpp", "Unable to create a SHM provider.");

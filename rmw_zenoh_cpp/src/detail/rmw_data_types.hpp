@@ -53,7 +53,8 @@ public:
   z_owned_session_t session;
 
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
-  struct rmw_shm_s {
+  struct rmw_shm_s
+  {
     z_owned_shm_provider_t shm_provider;
     size_t msgsize_threshold;
   };
