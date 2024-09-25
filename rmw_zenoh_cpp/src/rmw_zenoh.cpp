@@ -1001,7 +1001,7 @@ struct RosMsgSerializer
 
     // Object that serializes the data
     rmw_zenoh_cpp::Cdr ser(fastbuffer);
-    
+
     // Serialize message
     if (!publisher_data->type_support->serialize_ros_message(
         ros_message, ser.get_cdr(), publisher_data->type_support_impl))
