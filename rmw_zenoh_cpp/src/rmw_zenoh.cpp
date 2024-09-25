@@ -128,17 +128,18 @@ create_map_and_set_sequence_num(
 }
 
 rmw_ret_t publish(
-  rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-  z_moved_bytes_t* payload) {
-
+  rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
+  z_moved_bytes_t * payload)
+{
   auto free_payload = rcpputils::make_scope_exit(
-    [&payload]() { z_drop(payload); });
+    [&payload]() {z_drop(payload);});
 
   z_owned_bytes_t attachment;
   if (!create_map_and_set_sequence_num(
-    &attachment,
-    publisher_data->get_next_sequence_number(),
-    publisher_data->pub_gid)) {
+      &attachment,
+      publisher_data->get_next_sequence_number(),
+      publisher_data->pub_gid))
+  {
     // create_map_and_set_sequence_num already set the error
     return RMW_RET_ERROR;
   }
@@ -163,9 +164,10 @@ rmw_ret_t publish(
 /// Publish as RAW message.
 template<typename Tserializer, typename ... SerializerArgs>
 rmw_ret_t publish_raw(
-  rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+  rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
   size_t max_data_length,
-  SerializerArgs... serializer_args) {
+  SerializerArgs... serializer_args)
+{
   // printf(">>> rmw_publish(), Will use RAW\n");
 
   rcutils_allocator_t * allocator =
@@ -191,13 +193,13 @@ rmw_ret_t publish_raw(
     msg_bytes,
     max_data_length,
     publisher_data,
-    serializer_args...);
+    serializer_args ...);
   // Return error upon unsuccessful serialization
   if (data_length == 0) {
     // serialize_into already set the error
     return RMW_RET_ERROR;
   }
-  
+
   z_owned_bytes_t payload;
   if (z_bytes_serialize_from_buf(
       &payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length) != Z_OK)
@@ -213,12 +215,13 @@ rmw_ret_t publish_raw(
 /// Publish as SHM message.
 template<typename Tserializer, typename ... SerializerArgs>
 rmw_ret_t publish_shm(
-  rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+  rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
   size_t max_data_length,
-  const z_loaned_shm_provider_t *provider,
-  SerializerArgs... serializer_args) {
+  const z_loaned_shm_provider_t * provider,
+  SerializerArgs... serializer_args)
+{
   // printf(">>> rmw_publish(), Will use SHM\n");
-      
+
   // Allocate SHM bufer
   // We use 1-byte alignment
   z_buf_layout_alloc_result_t alloc;
@@ -243,12 +246,12 @@ rmw_ret_t publish_shm(
     });
 
   // Serialize message into memory
-  char* msg_bytes  = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
+  char * msg_bytes = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
   const size_t data_length = Tserializer::serialize_into(
     msg_bytes,
     max_data_length,
     publisher_data,
-    serializer_args...);
+    serializer_args ...);
 
   // Return error upon unsuccessful serialization
   if (data_length == 0) {
@@ -256,7 +259,7 @@ rmw_ret_t publish_shm(
     return RMW_RET_ERROR;
   }
 
-  // construct z_owned_bytes_t from SHM buffer 
+  // construct z_owned_bytes_t from SHM buffer
   z_owned_bytes_t payload;
   if (z_bytes_serialize_from_shm_mut(&payload, z_move(alloc.buf)) != Z_OK) {
     RMW_SET_ERROR_MSG("unable to serialize SHM buffer into Zenoh Payload");
@@ -271,19 +274,19 @@ rmw_ret_t publish_shm(
 /// Publish using raw or SHM(if applicable) buffer
 template<typename Tserializer, typename ... SerializerArgs>
 rmw_ret_t publish_with_method_selection(
-  rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
+  rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
   size_t max_data_length,
   SerializerArgs... serializer_args)
 {
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
   if (publisher_data->context->impl->shm.has_value() &&
-      publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length)
+    publisher_data->context->impl->shm.value().msgsize_threshold <= max_data_length)
   {
     return publish_shm<Tserializer, SerializerArgs...>(
       publisher_data,
       max_data_length,
       z_loan(publisher_data->context->impl->shm.value().shm_provider),
-      serializer_args...);
+      serializer_args ...);
   } else
 #endif
   {
@@ -988,10 +991,10 @@ rmw_return_loaned_message_from_publisher(
 struct RosMsgSerializer
 {
   static size_t serialize_into(
-    char *buffer,
+    char * buffer,
     size_t size,
-    rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-    const void *ros_message)
+    rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
+    const void * ros_message)
   {
     // Object that manages the raw buffer
     eprosima::fastcdr::FastBuffer fastbuffer(buffer, size);
@@ -1015,10 +1018,10 @@ struct RosMsgSerializer
 struct RosSerializedMsgSerializer
 {
   static size_t serialize_into(
-    char *_buffer,
+    char * _buffer,
     size_t _size,
-    rmw_zenoh_cpp::rmw_publisher_data_t* publisher_data,
-    const rmw_serialized_message_t *serialized_message)
+    rmw_zenoh_cpp::rmw_publisher_data_t * publisher_data,
+    const rmw_serialized_message_t * serialized_message)
   {
     eprosima::fastcdr::FastBuffer buffer(
       reinterpret_cast<char *>(serialized_message->buffer),
@@ -1156,8 +1159,8 @@ rmw_publish_serialized_message(
     return RMW_RET_ERROR);
 
   return publish_with_method_selection<RosSerializedMsgSerializer>(
-    publisher_data, 
-    serialized_message->buffer_length, 
+    publisher_data,
+    serialized_message->buffer_length,
     serialized_message);
 }
 

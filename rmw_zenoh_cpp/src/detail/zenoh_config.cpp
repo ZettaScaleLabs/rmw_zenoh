@@ -171,7 +171,7 @@ size_t zenoh_shm_message_size_threshold()
       zenoh_shm_message_size_threshold_envar);
     return zenoh_shm_message_size_threshold_default;
   }
-  
+
   // If the environment variable contains a value, handle it accordingly.
   if (envar_value[0] != '\0') {
     const auto read_value = std::strtoull(envar_value, nullptr, 10);
