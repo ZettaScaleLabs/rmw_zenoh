@@ -37,7 +37,7 @@ include(ExternalProject)
 set(ZENOHC_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
 ExternalProject_Add(zenohc
   PREFIX ${CMAKE_BINARY_DIR}/zenohc
-  GIT_REPOSITORY https://github.com/eclipse-zenoh/zenoh-c.git
+  GIT_REPOSITORY https://github.com/ZettaScaleLabs/zenoh-c.git
   GIT_TAG verify_optimization_error
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZENOHC_INSTALL_DIR} -DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}
   BUILD_IN_SOURCE 1
