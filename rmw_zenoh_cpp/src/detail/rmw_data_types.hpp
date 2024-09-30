@@ -52,9 +52,14 @@ public:
   // An owned session.
   z_owned_session_t session;
 
-  // An optional SHM provider that is initialized of SHM is enabled in the
-  // zenoh session config.
-  std::optional<z_owned_shm_provider_t> shm_provider;
+#ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
+  struct rmw_shm_s
+  {
+    z_owned_shm_provider_t shm_provider;
+    size_t msgsize_threshold;
+  };
+  std::optional<rmw_shm_s> shm;
+#endif
 
   z_owned_subscriber_t graph_subscriber;
 
