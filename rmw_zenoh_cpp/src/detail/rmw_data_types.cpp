@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <zenoh.h>
-
 #include <condition_variable>
 #include <cstring>
 #include <memory>
@@ -49,12 +47,6 @@ size_t hash_gid(const rmw_request_id_t & request_id)
   return hash_gid(request_id.writer_guid);
 }
 }  // namespace
-
-///=============================================================================
-size_t rmw_context_impl_s::get_next_entity_id()
-{
-  return next_entity_id_++;
-}
 
 namespace rmw_zenoh_cpp
 {
@@ -493,7 +485,7 @@ void sub_data_handler(
 }
 
 ///=============================================================================
-ZenohQuery::ZenohQuery(z_owned_query_t * query)
+ZenohQuery::ZenohQuery(z_owned_query_t query)
 {
   query_ = query;
 }
@@ -501,13 +493,13 @@ ZenohQuery::ZenohQuery(z_owned_query_t * query)
 ///=============================================================================
 ZenohQuery::~ZenohQuery()
 {
-  z_drop(z_move(*query_));
+  z_drop(z_move(query_));
 }
 
 ///=============================================================================
 const z_loaned_query_t * ZenohQuery::get_query() const
 {
-  return z_loan(*query_);
+  return z_loan(query_);
 }
 
 //==============================================================================
@@ -530,11 +522,11 @@ void service_data_handler(z_loaned_query_t * query, void * data)
   z_owned_query_t owned_query;
   z_query_clone(&owned_query, query);
 
-  service_data->add_new_query(std::make_unique<ZenohQuery>(&owned_query));
+  service_data->add_new_query(std::make_unique<ZenohQuery>(owned_query));
 }
 
 ///=============================================================================
-ZenohReply::ZenohReply(z_owned_reply_t * reply)
+ZenohReply::ZenohReply(z_owned_reply_t reply)
 {
   reply_ = reply;
 }
@@ -542,13 +534,13 @@ ZenohReply::ZenohReply(z_owned_reply_t * reply)
 ///=============================================================================
 ZenohReply::~ZenohReply()
 {
-  z_drop(z_move(*reply_));
+  z_drop(z_move(reply_));
 }
 
 ///=============================================================================
 const z_loaned_reply_t * ZenohReply::get_reply() const
 {
-  return z_loan(*reply_);
+  return z_loan(reply_);
 }
 
 ///=============================================================================
@@ -579,7 +571,7 @@ void client_data_handler(z_loaned_reply_t * reply, void * data)
   if (z_reply_is_ok(reply)) {
     z_owned_reply_t owned_reply;
     z_reply_clone(&owned_reply, reply);
-    client_data->add_new_reply(std::make_unique<ZenohReply>(&owned_reply));
+    client_data->add_new_reply(std::make_unique<ZenohReply>(owned_reply));
   } else {
     z_view_string_t keystr;
     z_keyexpr_as_view_string(z_loan(client_data->keyexpr), &keystr);
