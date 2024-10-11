@@ -220,7 +220,7 @@ std::shared_ptr<SubscriptionData> SubscriptionData::make(
     sub_options.query_consolidation = z_query_consolidation_none();
     ze_owned_querying_subscriber_t sub;
     if (ze_declare_querying_subscriber(
-        &sub, session, z_loan(sub_ke), z_move(callback), &sub_options))
+        session, &sub, z_loan(sub_ke), z_move(callback), &sub_options))
     {
       RMW_SET_ERROR_MSG("unable to create zenoh subscription");
       return nullptr;
@@ -274,7 +274,7 @@ std::shared_ptr<SubscriptionData> SubscriptionData::make(
 
     z_owned_subscriber_t sub;
     if (z_declare_subscriber(
-        &sub, session, z_loan(sub_ke), z_move(callback),
+        session, &sub, z_loan(sub_ke), z_move(callback),
         &sub_options) != Z_OK)
     {
       RMW_SET_ERROR_MSG("unable to create zenoh subscription");
@@ -295,7 +295,7 @@ std::shared_ptr<SubscriptionData> SubscriptionData::make(
       }
     });
   if (zc_liveliness_declare_token(
-      &sub_data->token_, session, z_loan(liveliness_ke), NULL) != Z_OK)
+      session, &sub_data->token_, z_loan(liveliness_ke), NULL) != Z_OK)
   {
     RMW_ZENOH_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",

@@ -1609,7 +1609,7 @@ rmw_create_client(
       }
     });
   if (zc_liveliness_declare_token(
-      &client_data->token, session, z_loan(liveliness_ke),
+      session, &client_data->token, z_loan(liveliness_ke),
       NULL) != Z_OK)
   {
     RMW_ZENOH_LOG_ERROR_NAMED(
@@ -2170,7 +2170,7 @@ rmw_create_service(
   z_queryable_options_default(&qable_options);
   qable_options.complete = true;
   if (z_declare_queryable(
-      &service_data->qable, session, z_loan(service_data->keyexpr),
+      session, &service_data->qable, z_loan(service_data->keyexpr),
       z_move(callback), &qable_options) != Z_OK)
   {
     RMW_SET_ERROR_MSG("unable to create zenoh queryable");
@@ -2191,7 +2191,7 @@ rmw_create_service(
       }
     });
   if (zc_liveliness_declare_token(
-      &service_data->token, session, z_loan(liveliness_ke),
+      session, &service_data->token, z_loan(liveliness_ke),
       NULL) != Z_OK)
   {
     RMW_ZENOH_LOG_ERROR_NAMED(
