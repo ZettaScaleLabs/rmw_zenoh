@@ -1762,6 +1762,7 @@ rmw_send_request(
   // Send request
   z_get_options_t opts;
   z_get_options_default(&opts);
+  opts.accept_replies = ZC_REPLY_KEYEXPR_ANY;
 
   z_owned_bytes_t attachment;
   rmw_zenoh_cpp::create_map_and_set_sequence_num(
