@@ -26,7 +26,7 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=zenoh/shared
 # - https://github.com/eclipse-zenoh/zenoh-c/pull/620 (fix ze_querying_subscriber_get API to query newly discovered publishers)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-  VCS_VERSION 134dbfa06ca212def5fb51dd8e816734dfd8dff6
+  VCS_VERSION 97df42189cfe0fc143b18f110bba9501faa8a713
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_CUSTOM_TARGET=${ZENOHC_CUSTOM_TARGET}"
