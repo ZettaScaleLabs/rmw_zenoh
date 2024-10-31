@@ -75,6 +75,16 @@ void rmw_context_impl_s::graph_sub_data_handler(z_loaned_sample_t * sample, void
   }
 }
 
+// The variable is used to identify whether the process is trying to exit or not.
+// The atexit function we registered will set the flag and prevent us from closing
+// Zenoh Session. Zenoh API can't be used in atexit function, because Tokio context
+// is already destroyed. It will cause panic if we do so.
+static bool is_exiting = false;
+void update_is_exiting()
+{
+  is_exiting = true;
+}
+
 ///=============================================================================
 rmw_context_impl_s::Data::Data(
   std::size_t domain_id,
@@ -97,6 +107,10 @@ rmw_context_impl_s::Data::Data(
   graph_guard_condition_ = std::make_unique<rmw_guard_condition_t>();
   graph_guard_condition_->implementation_identifier = rmw_zenoh_cpp::rmw_zenoh_identifier;
   graph_guard_condition_->data = &guard_condition_data_;
+  // This atexit function is registered after ROS initialization,
+  // so it should be called before ROS finialization
+  // Check https://en.cppreference.com/w/cpp/utility/program/exit
+  atexit(update_is_exiting);
 }
 
 ///=============================================================================
@@ -171,7 +185,11 @@ rmw_ret_t rmw_context_impl_s::Data::shutdown()
   if (shm_provider_.has_value()) {
     z_drop(z_move(shm_provider_.value()));
   }
-  z_close(z_loan_mut(session_), NULL);
+  // Don't touch Zenoh Session if the ROS process is exiting,
+  // it will cause panic.
+  if (!is_exiting) {
+    z_close(z_loan_mut(session_), NULL);
+  }
   is_shutdown_ = true;
   return RMW_RET_OK;
 }
@@ -335,8 +353,12 @@ rmw_context_impl_s::rmw_context_impl_s(
 ///=============================================================================
 rmw_context_impl_s::~rmw_context_impl_s()
 {
-  // std::lock_guard<std::recursive_mutex> lock(data_->mutex_);
-  // z_drop(z_move(data_->session_));
+  // Don't touch Zenoh Session if the ROS process is exiting,
+  // it will cause panic.
+  if (!is_exiting) {
+    std::lock_guard<std::recursive_mutex> lock(data_->mutex_);
+    z_drop(z_move(data_->session_));
+  }
 }
 
 ///=============================================================================
