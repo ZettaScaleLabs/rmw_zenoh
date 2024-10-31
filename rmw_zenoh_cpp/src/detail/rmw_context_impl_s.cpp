@@ -33,6 +33,16 @@
 // TODO(clalancette): Make this configurable, or get it from the configuration
 #define SHM_BUFFER_SIZE_MB 10
 
+// The variable is used to identify whether the process is trying to exit or not.
+// The atexit function we registered will set the flag and prevent us from closing
+// Zenoh Session. Zenoh API can't be used in atexit function, because Tokio context
+// is already destroyed. It will cause panic if we do so.
+static bool is_exiting = false;
+void update_is_exiting()
+{
+  is_exiting = true;
+}
+
 ///=============================================================================
 void rmw_context_impl_s::graph_sub_data_handler(z_loaned_sample_t * sample, void * data)
 {
@@ -75,16 +85,6 @@ void rmw_context_impl_s::graph_sub_data_handler(z_loaned_sample_t * sample, void
   }
 }
 
-// The variable is used to identify whether the process is trying to exit or not.
-// The atexit function we registered will set the flag and prevent us from closing
-// Zenoh Session. Zenoh API can't be used in atexit function, because Tokio context
-// is already destroyed. It will cause panic if we do so.
-static bool is_exiting = false;
-void update_is_exiting()
-{
-  is_exiting = true;
-}
-
 ///=============================================================================
 rmw_context_impl_s::Data::Data(
   std::size_t domain_id,
@@ -107,10 +107,6 @@ rmw_context_impl_s::Data::Data(
   graph_guard_condition_ = std::make_unique<rmw_guard_condition_t>();
   graph_guard_condition_->implementation_identifier = rmw_zenoh_cpp::rmw_zenoh_identifier;
   graph_guard_condition_->data = &guard_condition_data_;
-  // This atexit function is registered after ROS initialization,
-  // so it should be called before ROS finialization
-  // Check https://en.cppreference.com/w/cpp/utility/program/exit
-  atexit(update_is_exiting);
 }
 
 ///=============================================================================
@@ -232,6 +228,10 @@ rmw_context_impl_s::rmw_context_impl_s(
     RMW_SET_ERROR_MSG("Error setting up zenoh session");
     throw std::runtime_error("Error setting up zenoh session.");
   }
+  // This atexit function is registered after ROS initialization,
+  // so it should be called before ROS finialization
+  // Check https://en.cppreference.com/w/cpp/utility/program/exit
+  atexit(update_is_exiting);
   auto close_session = rcpputils::make_scope_exit(
     [&session]() {
       z_close(z_loan_mut(session), NULL);
