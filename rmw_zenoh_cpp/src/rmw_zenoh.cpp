@@ -49,9 +49,13 @@
 #include "rmw/rmw.h"
 #include "rmw/validate_namespace.h"
 #include "rmw/validate_node_name.h"
+#include "detail/rmw_context_impl_s.hpp"
+
+#include "rmw_zenoh_cpp/session.hpp"
 
 namespace
 {
+
 //==============================================================================
 const rosidl_message_type_support_t * find_message_type_support(
   const rosidl_message_type_support_t * type_supports)
@@ -144,6 +148,7 @@ bool rmw_feature_supported(rmw_feature_t feature)
       return false;
   }
 }
+
 
 //==============================================================================
 /// Create a node and return a handle to that node.
@@ -2931,3 +2936,11 @@ rmw_client_set_on_new_response_callback(
   return RMW_RET_OK;
 }
 }  // extern "C"
+
+namespace rmw_zenoh_cpp {
+const z_loaned_session_t*
+get_zenoh_session(rmw_node_t * node)
+{
+  return reinterpret_cast<const rmw_context_impl_s*>(node)->session();
+}
+} // namespace rmw_zenoh_cpp

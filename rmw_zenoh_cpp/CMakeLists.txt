@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(rmw_zenoh_cpp)
 
 # Default to C++17
@@ -23,7 +23,9 @@ find_package(rosidl_typesupport_fastrtps_cpp REQUIRED)
 find_package(rmw REQUIRED)
 find_package(zenoh_c_vendor REQUIRED)
 
-add_library(rmw_zenoh_cpp SHARED
+# include_directories(include)
+
+add_library(${PROJECT_NAME} SHARED
   src/detail/attachment_helpers.cpp
   src/detail/cdr.cpp
   src/detail/event.cpp
@@ -59,6 +61,10 @@ add_library(rmw_zenoh_cpp SHARED
   src/rmw_zenoh.cpp
 )
 
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+
 target_link_libraries(rmw_zenoh_cpp
   PRIVATE
     ament_index_cpp::ament_index_cpp
@@ -68,6 +74,9 @@ target_link_libraries(rmw_zenoh_cpp
     rosidl_typesupport_fastrtps_c::rosidl_typesupport_fastrtps_c
     rosidl_typesupport_fastrtps_cpp::rosidl_typesupport_fastrtps_cpp
     rmw::rmw
+)
+target_link_libraries(rmw_zenoh_cpp
+  PUBLIC
     zenohc::lib
 )
 
@@ -79,8 +88,6 @@ target_compile_definitions(rmw_zenoh_cpp
     RMW_VERSION_MINOR=${rmw_VERSION_MINOR}
     RMW_VERSION_PATCH=${rmw_VERSION_PATCH}
 )
-
-ament_export_targets(export_rmw_zenoh_cpp)
 
 register_rmw_implementation(
   "c:rosidl_typesupport_c:rosidl_typesupport_fastrtps_c:rosidl_typesupport_introspection_c"
@@ -102,9 +109,16 @@ if(BUILD_TESTING)
   ament_xmllint()
 endif()
 
+# install the include headers
+install(
+  DIRECTORY include/
+  DESTINATION include/${PROJECT_NAME}
+)
+
+# install the targets
 install(
   TARGETS rmw_zenoh_cpp
-  EXPORT export_rmw_zenoh_cpp
+  EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -137,5 +151,18 @@ install(
   TARGETS rmw_zenohd
   DESTINATION lib/${PROJECT_NAME}
 )
+
+# export targets
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+
+# export zenohc dependency for ament
+ament_export_dependencies(zenoh_c_vendor)
+
+# Export old-style CMake variables
+ament_export_include_directories("include/${PROJECT_NAME}")
+ament_export_libraries(${PROJECT_NAME})
+
+# Export modern CMake targets
+ament_export_targets(export_${PROJECT_NAME})
 
 ament_package()
