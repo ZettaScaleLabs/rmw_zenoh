@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD
 #include <cstdio>
-#include <optional>
 #include <zenoh.hxx>
-=======
-#include <zenoh.h>
->>>>>>> dev/1.0.0
 
 #include <string>
 
