@@ -14,20 +14,22 @@
 
 #include "liveliness_utils.hpp"
 
+#include <zenoh.h>
+
 #include <functional>
-#include <iomanip>
+#include <limits>
 #include <optional>
+#include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "logging_macros.hpp"
 #include "qos.hpp"
-
-#include "rcpputils/scope_exit.hpp"
+#include "simplified_xxhash3.hpp"
 
 #include "rmw/error_handling.h"
 
@@ -49,8 +51,27 @@ NodeInfo::NodeInfo(
   // Do nothing.
 }
 
+namespace
+{
+// Helper function to create a copy of a string after removing any
+// leading or trailing slashes.
+std::string strip_slashes(const std::string & str)
+{
+  std::string ret = str;
+  std::size_t start = 0;
+  std::size_t end = str.length() - 1;
+  if (str[0] == '/') {
+    ++start;
+  }
+  if (str[end] == '/') {
+    --end;
+  }
+  return ret.substr(start, end - start + 1);
+}
+}  // namespace
 ///=============================================================================
 TopicInfo::TopicInfo(
+  std::size_t domain_id,
   std::string name,
   std::string type,
   std::string type_hash,
@@ -60,7 +81,13 @@ TopicInfo::TopicInfo(
   type_hash_(std::move(type_hash)),
   qos_(std::move(qos))
 {
-  // Do nothing.
+  topic_keyexpr_ = std::to_string(domain_id);
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += strip_slashes(name_);
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += type_;
+  topic_keyexpr_ += "/";
+  topic_keyexpr_ += type_hash_;
 }
 
 ///=============================================================================
@@ -346,11 +373,11 @@ std::optional<rmw_qos_profile_t> keyexpr_to_qos(const std::string & keyexpr)
 ///=============================================================================
 std::string zid_to_str(const z_id_t & id)
 {
-  std::ostringstream oss;
-  for (int i = sizeof(id.id) - 1; i >= 0; i--) {
-      oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(id.id[i]);
-  }
-  return oss.str();
+  z_owned_string_t z_str;
+  z_id_to_string(&id, &z_str);
+  std::string str(z_string_data(z_loan(z_str)), z_string_len(z_loan(z_str)));
+  z_drop(z_move(z_str));
+  return str;
 }
 
 ///=============================================================================
@@ -400,7 +427,7 @@ Entity::Entity(
   for (std::size_t i = 0; i < KEYEXPR_INDEX_MAX + 1; ++i) {
     bool last = false;
     if (!keyexpr_parts[i].empty()) {
-      this->keyexpr_ += std::move(keyexpr_parts[i]);
+      this->liveliness_keyexpr_ += std::move(keyexpr_parts[i]);
     }
     if (i == KEYEXPR_INDEX_MAX || keyexpr_parts[i + 1].empty()) {
       last = true;
@@ -409,9 +436,19 @@ Entity::Entity(
       break;
     }
     // Append the delimiter unless it is the last component.
-    this->keyexpr_ += KEYEXPR_DELIMITER;
+    this->liveliness_keyexpr_ += KEYEXPR_DELIMITER;
   }
-  this->guid_ = std::hash<std::string>{}(this->keyexpr_);
+
+  // Here we hash the complete std::string that comprises the liveliness keyexpression
+  // into a GID that is associated with every entity in the system.  This is the GID that will be
+  // returned to the RMW layer as necessary.
+  simplified_XXH128_hash_t keyexpr_gid =
+    simplified_XXH3_128bits(this->liveliness_keyexpr_.c_str(), this->liveliness_keyexpr_.length());
+  memcpy(this->gid_, &keyexpr_gid.low64, sizeof(keyexpr_gid.low64));
+  memcpy(this->gid_ + sizeof(keyexpr_gid.low64), &keyexpr_gid.high64, sizeof(keyexpr_gid.high64));
+
+  // We also hash the liveliness keyexpression into a size_t that we use to index into our maps.
+  this->keyexpr_hash_ = hash_gid(this->gid_);
 }
 
 ///=============================================================================
@@ -518,6 +555,7 @@ std::shared_ptr<Entity> Entity::make(const std::string & keyexpr)
       return nullptr;
     }
     topic_info = TopicInfo{
+      domain_id,
       demangle_name(std::move(parts[KeyexprIndex::TopicName])),
       demangle_name(std::move(parts[KeyexprIndex::TopicType])),
       demangle_name(std::move(parts[KeyexprIndex::TopicTypeHash])),
@@ -554,9 +592,9 @@ std::string Entity::id() const
 }
 
 ///=============================================================================
-std::size_t Entity::guid() const
+std::size_t Entity::keyexpr_hash() const
 {
-  return this->guid_;
+  return this->keyexpr_hash_;
 }
 
 ///=============================================================================
@@ -581,23 +619,33 @@ std::string Entity::node_enclave() const
 }
 
 ///=============================================================================
+NodeInfo Entity::node_info() const
+{
+  return this->node_info_;
+}
+
+///=============================================================================
 std::optional<TopicInfo> Entity::topic_info() const
 {
   return this->topic_info_;
 }
 
 ///=============================================================================
-std::string Entity::keyexpr() const
+std::string Entity::liveliness_keyexpr() const
 {
-  return this->keyexpr_;
+  return this->liveliness_keyexpr_;
+}
+
+///=============================================================================
+void Entity::copy_gid(uint8_t out_gid[RMW_GID_STORAGE_SIZE]) const
+{
+  memcpy(out_gid, gid_, RMW_GID_STORAGE_SIZE);
 }
 
 ///=============================================================================
 bool Entity::operator==(const Entity & other) const
 {
-  // TODO(Yadunund): If we decide to directly store the guid as a
-  // rmw_gid_t type, we should rely on rmw_compare_gids_equal() instead.
-  return other.guid() == guid_;
+  return other.keyexpr_hash() == keyexpr_hash_;
 }
 
 ///=============================================================================
@@ -628,4 +676,16 @@ std::string demangle_name(const std::string & input)
   return output;
 }
 }  // namespace liveliness
+
+///=============================================================================
+size_t hash_gid(const uint8_t gid[RMW_GID_STORAGE_SIZE])
+{
+  std::stringstream hash_str;
+  hash_str << std::hex;
+  size_t i = 0;
+  for (; i < (RMW_GID_STORAGE_SIZE - 1); i++) {
+    hash_str << static_cast<int>(gid[i]);
+  }
+  return std::hash<std::string>{}(hash_str.str());
+}
 }  // namespace rmw_zenoh_cpp
