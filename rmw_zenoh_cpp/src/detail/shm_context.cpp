@@ -23,15 +23,15 @@ namespace rmw_zenoh_cpp
 ShmContext::ShmContext(size_t alloc_size, size_t msgsize_threshold)
 :msgsize_threshold(msgsize_threshold)
 {
-    // Create Layout for provider's memory
-    // Provider's alignment will be 1 byte as we are going to make only 1-byte aligned allocations
-    // TODO(yellowhatter): use zenoh_shm_message_size_threshold as base for alignment
+  // Create Layout for provider's memory
+  // Provider's alignment will be 1 byte as we are going to make only 1-byte aligned allocations
+  // TODO(yellowhatter): use zenoh_shm_message_size_threshold as base for alignment
   z_alloc_alignment_t alignment = {0};
   z_owned_memory_layout_t layout;
   if (z_memory_layout_new(&layout, alloc_size, alignment) != Z_OK) {
     throw std::runtime_error("Unable to create a Layout for SHM provider.");
   }
-    // Create SHM provider
+  // Create SHM provider
   const auto provider_creation_result =
     z_posix_shm_provider_new(&shm_provider, z_loan(layout));
   z_drop(z_move(layout));

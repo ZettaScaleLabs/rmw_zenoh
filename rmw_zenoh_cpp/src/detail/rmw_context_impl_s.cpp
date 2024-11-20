@@ -181,9 +181,10 @@ public:
     if (rmw_zenoh_cpp::zenoh_shm_enabled()) {
       RMW_ZENOH_LOG_DEBUG_NAMED("rmw_zenoh_cpp", "SHM is enabled");
 
-      shm_ = std::make_optional(rmw_zenoh_cpp::ShmContext(
-        rmw_zenoh_cpp::zenoh_shm_alloc_size(),
-        rmw_zenoh_cpp::zenoh_shm_message_size_threshold()
+      shm_ = std::make_optional(
+        rmw_zenoh_cpp::ShmContext(
+          rmw_zenoh_cpp::zenoh_shm_alloc_size(),
+          rmw_zenoh_cpp::zenoh_shm_message_size_threshold()
       ));
     } else {
       RMW_ZENOH_LOG_DEBUG_NAMED("rmw_zenoh_cpp", "SHM is disabled");
