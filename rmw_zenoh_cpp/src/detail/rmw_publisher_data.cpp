@@ -404,7 +404,7 @@ rmw_ret_t PublisherData::publish_serialized_message(
 
     if (alloc.status == ZC_BUF_LAYOUT_ALLOC_STATUS_OK) {
       auto msg_bytes = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
-      std::memcpy(msg_bytes, serialized_message->buffer, data_length);
+      memcpy(msg_bytes, serialized_message->buffer, data_length);
       z_bytes_from_shm_mut(&payload, z_move(alloc.buf));
     } else {
       // TODO(Yadunund): Should we revert to regular allocation and not return an error?
