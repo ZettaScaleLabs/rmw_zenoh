@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DETAIL__SERIALIZATION_BUFFER_POOL_HPP_
-#define DETAIL__SERIALIZATION_BUFFER_POOL_HPP_
+#ifndef DETAIL__BUFFER_POOL_HPP_
+#define DETAIL__BUFFER_POOL_HPP_
 
 #include <mutex>
 #include <cassert>
@@ -21,13 +21,14 @@
 
 #include "rcutils/allocator.h"
 
-class SerializationBufferPool
+class BufferPool
 {
 public:
-  SerializationBufferPool() = default;
+  BufferPool() = default;
 
   uint8_t * allocate(rcutils_allocator_t * allocator, size_t size)
   {
+    // FIXME(fuzzypixelz): indeed, this methods leaks all allocated buffers ;)
     std::lock_guard<std::mutex> guard(mutex_);
 
     if (available_buffers_.empty()) {
@@ -47,7 +48,6 @@ public:
         assert(buffer.data);  // FIXME(fuzzypixelz): handle error
         buffer.size = size;
       }
-
       return buffer.data;
     }
   }
@@ -56,6 +56,7 @@ public:
   deallocate(uint8_t * data)
   {
     std::lock_guard<std::mutex> guard(mutex_);
+
     for (size_t i = 0; i < buffers_.size(); i++) {
       if (buffers_.at(i).data == data) {
         available_buffers_.push_back(i);
@@ -77,4 +78,4 @@ private:
   std::mutex mutex_;
 };
 
-#endif  // DETAIL__SERIALIZATION_BUFFER_POOL_HPP_
+#endif  // DETAIL__BUFFER_POOL_HPP_

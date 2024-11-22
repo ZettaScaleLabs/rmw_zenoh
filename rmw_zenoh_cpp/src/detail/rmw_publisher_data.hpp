@@ -27,7 +27,7 @@
 #include "event.hpp"
 #include "liveliness_utils.hpp"
 #include "message_type_support.hpp"
-#include "serialization_buffer_pool.hpp"
+#include "buffer_pool.hpp"
 
 #include "rmw/ret_types.h"
 
@@ -109,8 +109,7 @@ private:
   size_t sequence_number_;
   // Shutdown flag.
   bool is_shutdown_;
-  // Pool of serialization buffers.
-  SerializationBufferPool serialization_buffer_pool;
+
 };
 using PublisherDataPtr = std::shared_ptr<PublisherData>;
 using PublisherDataConstPtr = std::shared_ptr<const PublisherData>;
