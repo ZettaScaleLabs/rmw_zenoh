@@ -147,10 +147,7 @@ std::shared_ptr<PublisherData> PublisherData::make(
 
   if (adapted_qos_profile.reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
     opts.reliability = Z_RELIABILITY_RELIABLE;
-
-    if (adapted_qos_profile.history == RMW_QOS_POLICY_HISTORY_KEEP_ALL) {
-      opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
-    }
+    opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
   }
   z_owned_publisher_t pub;
   // TODO(clalancette): What happens if the key name is a valid but empty string?
