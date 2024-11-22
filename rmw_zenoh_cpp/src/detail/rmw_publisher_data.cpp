@@ -147,6 +147,11 @@ std::shared_ptr<PublisherData> PublisherData::make(
 
   if (adapted_qos_profile.reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
     opts.reliability = Z_RELIABILITY_RELIABLE;
+    // Note: Unlike DDS which blocks the Publisher only if QoS is RELIABLE + KEEP_ALL,
+    // we configure Zenoh to block for any RELIABLE Publisher.
+    // The reason being that over congested networks (where Zenoh is often used) the default
+    // behaviour would often lead to message losses, which could be problematic in the
+    // case of a "latched topic" (RELIABLE, TRANSIENT_LOCAL, KEEP_LAST(1), only 1 publication)
     opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
   }
   z_owned_publisher_t pub;
