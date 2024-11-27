@@ -100,9 +100,13 @@ public:
       RMW_SET_ERROR_MSG("Error setting up zenoh session");
       throw std::runtime_error("Error setting up zenoh session.");
     }
+    atexit(update_is_exiting);
     auto close_session = rcpputils::make_scope_exit(
       [this]() {
-        z_close(z_loan_mut(session_), NULL);
+        // Don't touch Zenoh Session if the ROS process is exiting, it will cause panic.
+        if (!is_exiting) {
+          z_close(z_loan_mut(session_), NULL);
+        }
       });
 
     // Verify if the zenoh router is running if configured.
@@ -230,19 +234,6 @@ public:
         return ret;
       }
 
-      // Shutdown all the nodes in this context.
-      for (auto node_it = nodes_.begin(); node_it != nodes_.end(); ++node_it) {
-        ret = node_it->second->shutdown();
-        if (ret != RMW_RET_OK) {
-          RMW_ZENOH_LOG_ERROR_NAMED(
-            "rmw_zenoh_cpp",
-            "Unable to shutdown node with id %zu. rmw_ret_t code: %zu.",
-            node_it->second->id(),
-            ret
-          );
-        }
-      }
-
       z_undeclare_subscriber(z_move(graph_subscriber_));
 #ifdef RMW_ZENOH_BUILD_WITH_SHARED_MEMORY
       // drop SHM subsystem if used
@@ -254,10 +245,13 @@ public:
       // to avoid an AB/BA deadlock if shutdown is racing with graph_sub_data_handler().
     }
 
-    // Close the zenoh session
-    if (z_close(z_loan_mut(session_), NULL) != Z_OK) {
-      RMW_SET_ERROR_MSG("Error while closing zenoh session");
-      return RMW_RET_ERROR;
+    // Don't touch Zenoh Session if the ROS process is exiting, it will cause panic.
+    if (!is_exiting) {
+      // Close the zenoh session
+      if (z_close(z_loan_mut(session_), NULL) != Z_OK) {
+        RMW_SET_ERROR_MSG("Error while closing zenoh session");
+        return RMW_RET_ERROR;
+      }
     }
     return RMW_RET_OK;
   }
