@@ -28,7 +28,11 @@
 #include "liveliness_utils.hpp"
 #include "message_type_support.hpp"
 #include "shm_context.hpp"
+#include "type_support_common.hpp"
 
+#include "rcutils/allocator.h"
+
+#include "rmw/rmw.h"
 #include "rmw/ret_types.h"
 
 namespace rmw_zenoh_cpp

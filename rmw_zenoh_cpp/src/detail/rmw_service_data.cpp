@@ -15,8 +15,8 @@
 #include "rmw_service_data.hpp"
 
 #include <fastcdr/FastBuffer.h>
-#include <zenoh.h>
 
+#include <cinttypes>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -25,12 +25,16 @@
 
 #include "attachment_helpers.hpp"
 #include "cdr.hpp"
+#include "rmw_context_impl_s.hpp"
+#include "message_type_support.hpp"
 #include "logging_macros.hpp"
 #include "qos.hpp"
 
 #include "rcpputils/scope_exit.hpp"
 
 #include "rmw/error_handling.h"
+#include "rmw/get_topic_endpoint_info.h"
+#include "rmw/impl/cpp/macros.hpp"
 
 namespace rmw_zenoh_cpp
 {
@@ -46,8 +50,9 @@ void service_data_handler(z_loaned_query_t * query, void * data)
     RMW_ZENOH_LOG_ERROR_NAMED(
       "rmw_zenoh_cpp",
       "Unable to obtain ServiceData from data for "
-      "service for %s",
-      z_loan(keystr)
+      "service for %.*s",
+      static_cast<int>(z_string_len(z_loan(keystr))),
+      z_string_data(z_loan(keystr))
     );
     return;
   }

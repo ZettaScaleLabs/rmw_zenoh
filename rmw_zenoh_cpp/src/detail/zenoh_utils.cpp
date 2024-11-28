@@ -15,9 +15,12 @@
 #include "zenoh_utils.hpp"
 
 #include <chrono>
+#include <cinttypes>
 
 #include "attachment_helpers.hpp"
-#include "rmw/types.h"
+#include "rcpputils/scope_exit.hpp"
+
+#include "rmw/error_handling.h"
 
 namespace rmw_zenoh_cpp
 {
@@ -34,7 +37,10 @@ void create_map_and_set_sequence_num(
 }
 
 ///=============================================================================
-ZenohQuery::ZenohQuery(const z_loaned_query_t * query, std::chrono::nanoseconds::rep received_timestamp) {
+ZenohQuery::ZenohQuery(
+  const z_loaned_query_t * query,
+  std::chrono::nanoseconds::rep received_timestamp)
+{
   z_query_clone(&query_, query);
   received_timestamp_ = received_timestamp;
 }

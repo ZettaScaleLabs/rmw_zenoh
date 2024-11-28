@@ -16,6 +16,7 @@
 
 #include <fastcdr/FastBuffer.h>
 
+#include <cinttypes>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -26,16 +27,16 @@
 #include "attachment_helpers.hpp"
 #include "cdr.hpp"
 #include "identifier.hpp"
+#include "rmw_context_impl_s.hpp"
 #include "message_type_support.hpp"
 #include "logging_macros.hpp"
 #include "qos.hpp"
-// Use the implemented rmw_context_impl_t
-#include "rmw_context_impl_s.hpp"
 
 #include "rcpputils/scope_exit.hpp"
 
 #include "rmw/error_handling.h"
 #include "rmw/get_topic_endpoint_info.h"
+#include "rmw/impl/cpp/macros.hpp"
 
 namespace rmw_zenoh_cpp
 {
@@ -65,12 +66,14 @@ void sub_data_handler(z_loaned_sample_t * sample, void * data)
   z_owned_slice_t slice;
   z_bytes_to_slice(payload, &slice);
 
+  std::string topic_name(z_string_data(z_loan(keystr)), z_string_len(z_loan(keystr)));
+
   sub_data->add_new_message(
     std::make_unique<SubscriptionData::Message>(
       slice,
       z_timestamp_ntp64_time(z_sample_timestamp(sample)),
       std::move(attachment)),
-    z_string_data(z_loan(keystr)));
+    topic_name);
 }
 }  // namespace
 
