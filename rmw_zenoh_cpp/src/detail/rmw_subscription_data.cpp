@@ -66,7 +66,6 @@ void sub_data_handler(z_loaned_sample_t * sample, void * data)
   z_bytes_to_slice(payload, &slice);
 
   std::string topic_name(z_string_data(z_loan(keystr)), z_string_len(z_loan(keystr)));
-  printf("topic_name=%s\n", topic_name.c_str());
 
   sub_data->add_new_message(
     std::make_unique<SubscriptionData::Message>(

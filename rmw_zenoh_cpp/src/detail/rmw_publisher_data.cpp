@@ -234,7 +234,6 @@ namespace rmw_zenoh_cpp
 
   void delete_z_bytes(void *data, void *context)
   {
-    printf("@fp/delete_z_bytes: data=%p, context=%p\n", data, context);
     BufferPool *pool = reinterpret_cast<BufferPool *>(context);
     pool->deallocate(static_cast<uint8_t *>(data));
   }
