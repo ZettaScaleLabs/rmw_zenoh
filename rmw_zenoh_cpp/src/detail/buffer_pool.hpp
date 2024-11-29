@@ -40,7 +40,7 @@ public:
       buffers_.push_back(buffer);
       return data;
     } else {
-      SerializationBuffer buffer = buffers_.at(available_buffers_.back());
+      SerializationBuffer & buffer = buffers_.at(available_buffers_.back());
       available_buffers_.pop_back();
       if (buffer.size < size) {
         buffer.data = static_cast<uint8_t *>(allocator->reallocate(
@@ -74,7 +74,6 @@ private:
 
   std::vector<SerializationBuffer> buffers_;
   std::vector<size_t> available_buffers_;
-  // NOTE(fuzzypixelz): this will presumably locked in Zenoh's RX task and could cause deadlocks (?)
   std::mutex mutex_;
 };
 
