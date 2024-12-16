@@ -227,6 +227,12 @@ PublisherData::PublisherData(
   events_mgr_ = std::make_shared<EventsManager>();
 }
 
+void delete_z_bytes(void *data, void *context)
+{
+  BufferPool *pool = reinterpret_cast<BufferPool *>(context);
+  pool->deallocate(static_cast<uint8_t *>(data));
+}
+
 ///=============================================================================
 rmw_ret_t PublisherData::publish(
   const void * ros_message,
@@ -244,7 +250,7 @@ rmw_ret_t PublisherData::publish(
     type_support_impl_);
 
   // To store serialized message byte array.
-  char * msg_bytes = nullptr;
+  uint8_t * msg_bytes = nullptr;
   std::optional<z_owned_shm_mut_t> shmbuf = std::nullopt;
   auto always_free_shmbuf = rcpputils::make_scope_exit(
     [&shmbuf]() {
@@ -254,13 +260,7 @@ rmw_ret_t PublisherData::publish(
     });
 
   rcutils_allocator_t * allocator = &rmw_node_->context->options.allocator;
-
-  auto always_free_msg_bytes = rcpputils::make_scope_exit(
-    [&msg_bytes, allocator, &shmbuf]() {
-      if (msg_bytes && !shmbuf.has_value()) {
-        allocator->deallocate(msg_bytes, allocator->state);
-      }
-    });
+  rmw_context_impl_s * context_impl = static_cast<rmw_context_impl_s *>(rmw_node_->data);
 
   // Get memory from SHM buffer if available.
   if (shm_provider.has_value()) {
@@ -274,21 +274,21 @@ rmw_ret_t PublisherData::publish(
 
     if (alloc.status == ZC_BUF_LAYOUT_ALLOC_STATUS_OK) {
       shmbuf = std::make_optional(alloc.buf);
-      msg_bytes = reinterpret_cast<char *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
+      msg_bytes = reinterpret_cast<uint8_t *>(z_shm_mut_data_mut(z_loan_mut(alloc.buf)));
     } else {
       // TODO(Yadunund): Should we revert to regular allocation and not return an error?
       RMW_SET_ERROR_MSG("Failed to allocate a SHM buffer, even after GCing.");
       return RMW_RET_ERROR;
     }
   } else {
-    // Get memory from the allocator.
-    msg_bytes = static_cast<char *>(allocator->allocate(max_data_length, allocator->state));
+    // Get memory from the buffer pool.
+    msg_bytes = context_impl->serialization_buffer_pool.allocate(allocator, max_data_length);
     RMW_CHECK_FOR_NULL_WITH_MSG(
       msg_bytes, "bytes for message is null", return RMW_RET_BAD_ALLOC);
   }
 
   // Object that manages the raw buffer
-  eprosima::fastcdr::FastBuffer fastbuffer(msg_bytes, max_data_length);
+  eprosima::fastcdr::FastBuffer fastbuffer(reinterpret_cast<char *>(msg_bytes), max_data_length);
 
   // Object that serializes the data
   rmw_zenoh_cpp::Cdr ser(fastbuffer);
@@ -318,7 +318,8 @@ rmw_ret_t PublisherData::publish(
   if (shmbuf.has_value()) {
     z_bytes_from_shm_mut(&payload, z_move(shmbuf.value()));
   } else {
-    z_bytes_copy_from_buf(&payload, reinterpret_cast<const uint8_t *>(msg_bytes), data_length);
+    z_bytes_from_buf(&payload, msg_bytes, data_length, delete_z_bytes,
+        reinterpret_cast<void *>(&context_impl->serialization_buffer_pool));
   }
 
   z_result_t res = z_publisher_put(z_loan(pub_), z_move(payload), &options);
