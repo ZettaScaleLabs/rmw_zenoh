@@ -35,6 +35,7 @@
 #include "attachment_helpers.hpp"
 #include "type_support_common.hpp"
 #include "zenoh_utils.hpp"
+#include "payload.hpp"
 
 #include "rcutils/allocator.h"
 
@@ -50,13 +51,13 @@ public:
   struct Message
   {
     explicit Message(
-      z_owned_slice_t p,
+      const z_loaned_bytes_t * bytes,
       uint64_t recv_ts,
       AttachmentData && attachment);
 
-    ~Message();
+    ~Message() = default;
 
-    z_owned_slice_t payload;
+    Payload payload;
     uint64_t recv_timestamp;
     AttachmentData attachment;
   };

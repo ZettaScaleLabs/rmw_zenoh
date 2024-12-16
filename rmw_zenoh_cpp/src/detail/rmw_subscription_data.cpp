@@ -63,14 +63,11 @@ void sub_data_handler(z_loaned_sample_t * sample, void * data)
   AttachmentData attachment(z_sample_attachment(sample));
   const z_loaned_bytes_t * payload = z_sample_payload(sample);
 
-  z_owned_slice_t slice;
-  z_bytes_to_slice(payload, &slice);
-
   std::string topic_name(z_string_data(z_loan(keystr)), z_string_len(z_loan(keystr)));
 
   sub_data->add_new_message(
     std::make_unique<SubscriptionData::Message>(
-      slice,
+      payload,
       std::chrono::system_clock::now().time_since_epoch().count(),
       std::move(attachment)),
     topic_name);
@@ -79,17 +76,11 @@ void sub_data_handler(z_loaned_sample_t * sample, void * data)
 
 ///=============================================================================
 SubscriptionData::Message::Message(
-  z_owned_slice_t p,
+  const z_loaned_bytes_t * bytes,
   uint64_t recv_ts,
   AttachmentData && attachment_)
-: payload(p), recv_timestamp(recv_ts), attachment(std::move(attachment_))
+: payload(Payload(bytes)), recv_timestamp(recv_ts), attachment(std::move(attachment_))
 {
-}
-
-///=============================================================================
-SubscriptionData::Message::~Message()
-{
-  z_drop(z_move(payload));
 }
 
 ///=============================================================================
@@ -479,8 +470,8 @@ rmw_ret_t SubscriptionData::take_one_message(
   std::unique_ptr<Message> msg_data = std::move(message_queue_.front());
   message_queue_.pop_front();
 
-  const uint8_t * payload = z_slice_data(z_loan(msg_data->payload));
-  const size_t payload_len = z_slice_len(z_loan(msg_data->payload));
+  const uint8_t * payload = msg_data->payload.data();
+  const size_t payload_len = msg_data->payload.size();
 
   // Object that manages the raw buffer
   eprosima::fastcdr::FastBuffer fastbuffer(
@@ -530,8 +521,8 @@ rmw_ret_t SubscriptionData::take_serialized_message(
   std::unique_ptr<Message> msg_data = std::move(message_queue_.front());
   message_queue_.pop_front();
 
-  const uint8_t * payload = z_slice_data(z_loan(msg_data->payload));
-  const size_t payload_len = z_slice_len(z_loan(msg_data->payload));
+  const uint8_t * payload = msg_data->payload.data();
+  const size_t payload_len = msg_data->payload.size();
 
   if (serialized_message->buffer_capacity < payload_len) {
     rmw_ret_t ret =
