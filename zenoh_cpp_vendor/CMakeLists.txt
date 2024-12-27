@@ -15,9 +15,7 @@ find_package(ament_cmake_vendor_package REQUIRED)
 # Note: We separate the two args needed for cargo with "$<SEMICOLON>" and not ";" as the
 # latter is a list separater in cmake and hence the string will be split into two
 # when expanded.
-set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=zenoh/transport_compression zenoh/transport_tcp zenoh/transport_tls")
-
-set(RMW_ZENOH_BUILD_WITH_SHARED_MEMORY TRUE CACHE BOOL "Compile Zenoh RMW with Shared Memory support")
+set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memory zenoh/transport_compression zenoh/transport_tcp zenoh/transport_tls")
 
 # Set VCS_VERSION to include latest changes from zenoh-c to benefit from :
 # - https://github.com/eclipse-zenoh/zenoh-c/pull/340 (fix build issue)
@@ -31,7 +29,6 @@ ament_vendor(zenoh_c_vendor
   VCS_VERSION 2f389597264c200d9ddf72bbabbfea878abd5179
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
-    "-DZENOHC_BUILD_WITH_SHARED_MEMORY:BOOL=${RMW_ZENOH_BUILD_WITH_SHARED_MEMORY}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
     "-DZENOHC_CUSTOM_TARGET=${ZENOHC_CUSTOM_TARGET}"
 )
@@ -42,9 +39,8 @@ ament_vendor(zenoh_cpp_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
   VCS_VERSION c549fbdf54e866b9d8f29c883e66359fcac88ed4
   CMAKE_ARGS
-      -DZENOHCXX_ZENOHC=ON
-      -DZENOHCXX_ZENOHPICO=OFF
-  )
+    -DZENOHCXX_ZENOHC=OFF
+)
 
 externalproject_add_stepdependencies(zenoh_cpp_vendor configure zenoh_c_vendor)
 
