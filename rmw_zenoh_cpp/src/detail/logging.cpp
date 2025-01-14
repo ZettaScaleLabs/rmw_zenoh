@@ -19,7 +19,7 @@ namespace rmw_zenoh_cpp
 ///=============================================================================
 Logger & Logger::get()
 {
-  static Logger logger(RCUTILS_LOG_SEVERITY_INFO);
+  static Logger logger(RCUTILS_LOG_SEVERITY_UNSET);
   return logger;
 }
 
