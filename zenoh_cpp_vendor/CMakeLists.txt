@@ -24,7 +24,7 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 # - https://github.com/eclipse-zenoh/zenoh/pull/1717 (Improve performance of a large number of peers)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-  VCS_VERSION 328736fe9bb9b654b1d9f47eecfc6d52f0d7d587
+  VCS_VERSION 15d56e1fb44eead6611cf847f503ef030aee5287
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
@@ -38,7 +38,7 @@ ament_export_dependencies(zenohc)
 # - https://github.com/eclipse-zenoh/zenoh-cpp/pull/363 (Fix memory leak in string deserialization)
 ament_vendor(zenoh_cpp_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
-  VCS_VERSION bbfef04e843289aae70b5aa060a925e8ee5b1b6f
+  VCS_VERSION bd4d741c6c4fa6509d8d745e22c3c50b4306bd65
   CMAKE_ARGS
     -DZENOHCXX_ZENOHC=OFF
 )
