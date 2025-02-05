@@ -28,6 +28,7 @@
 #include "event.hpp"
 #include "liveliness_utils.hpp"
 #include "message_type_support.hpp"
+#include "shm_context.hpp"
 #include "type_support_common.hpp"
 #include "zenoh_utils.hpp"
 
@@ -45,6 +46,7 @@ public:
   // Make a shared_ptr of PublisherData.
   static std::shared_ptr<PublisherData> make(
     std::shared_ptr<zenoh::Session> session,
+    const rmw_publisher_t * const rmw_publisher,
     const rmw_node_t * const node,
     liveliness::NodeInfo node_info,
     std::size_t node_id,
@@ -56,12 +58,14 @@ public:
   // Publish a ROS message.
   rmw_ret_t publish(
     const void * ros_message,
-    std::optional<zenoh::ShmProvider> & shm_provider);
+    const std::optional<ShmContext> & shm
+  );
 
   // Publish a serialized ROS message.
   rmw_ret_t publish_serialized_message(
     const rmw_serialized_message_t * serialized_message,
-    std::optional<zenoh::ShmProvider> & shm_provider);
+    const std::optional<ShmContext> & shm
+  );
 
   // Get a copy of the keyexpr_hash of this PublisherData's liveliness::Entity.
   std::size_t keyexpr_hash() const;
@@ -90,6 +94,7 @@ public:
 private:
   // Constructor.
   PublisherData(
+    const rmw_publisher_t * const rmw_publisher,
     const rmw_node_t * rmw_node,
     std::shared_ptr<liveliness::Entity> entity,
     std::shared_ptr<zenoh::Session> session,
@@ -101,6 +106,8 @@ private:
 
   // Internal mutex.
   mutable std::mutex mutex_;
+  // The rmw publisher
+  const rmw_publisher_t * rmw_publisher_;
   // The parent node.
   const rmw_node_t * rmw_node_;
   // The Entity generated for the publisher.
