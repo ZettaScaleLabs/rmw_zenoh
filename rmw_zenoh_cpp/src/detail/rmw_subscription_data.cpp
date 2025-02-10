@@ -145,6 +145,7 @@ SubscriptionData::SubscriptionData(
   sess_(std::move(session)),
   type_support_impl_(type_support_impl),
   type_support_(std::move(type_support)),
+  queue_empty_(true),
   last_known_published_msg_({}),
   wait_set_data_(nullptr),
   is_shutdown_(false),
@@ -350,11 +351,10 @@ liveliness::TopicInfo SubscriptionData::topic_info() const
 ///=============================================================================
 bool SubscriptionData::liveliness_is_valid() const
 {
-  std::lock_guard<std::mutex> lock(mutex_);
   // The z_check function is now internal in zenoh-1.0.0 so we assume
   // the liveliness token is still initialized as long as this entity has
   // not been shutdown.
-  return !is_shutdown_;
+  return !is_shutdown_.load(std::memory_order_seq_cst);
 }
 
 ///=============================================================================
@@ -382,7 +382,7 @@ rmw_ret_t SubscriptionData::shutdown()
 {
   rmw_ret_t ret = RMW_RET_OK;
   std::lock_guard<std::mutex> lock(mutex_);
-  if (is_shutdown_ || !initialized_) {
+  if (is_shutdown_.load(std::memory_order_seq_cst) || !initialized_) {
     return ret;
   }
 
@@ -430,7 +430,7 @@ rmw_ret_t SubscriptionData::shutdown()
   }
 
   sess_.reset();
-  is_shutdown_ = true;
+  is_shutdown_.store(true, std::memory_order_seq_cst);
   initialized_ = false;
   return ret;
 }
@@ -438,31 +438,39 @@ rmw_ret_t SubscriptionData::shutdown()
 ///=============================================================================
 bool SubscriptionData::is_shutdown() const
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return is_shutdown_;
+  return is_shutdown_.load(std::memory_order_seq_cst);
 }
 
 ///=============================================================================
 bool SubscriptionData::queue_has_data_and_attach_condition_if_not(
   rmw_wait_set_data_t * wait_set_data)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (!message_queue_.empty()) {
+  // TODO(yellowhatter): I assume that the path with non-empty queue should be the most optimized one
+  if (!queue_empty_.load(std::memory_order_relaxed)) {
     return true;
   }
 
-  wait_set_data_ = wait_set_data;
+  // TODO(yellowhatter): review and relax consistency models
 
+  // store waiter
+  wait_set_data_.store(wait_set_data, std::memory_order_relaxed);
+  
+  // collision: if queue got non-empty while we were setting waiter,
+  // we switch to direct processing
+  if (!queue_empty_.load(std::memory_order_seq_cst)) {
+    wait_set_data_.store(nullptr, std::memory_order_relaxed);
+    return true;
+  }
+  
+  // queue is empty, waiter is set
   return false;
 }
 
 ///=============================================================================
 bool SubscriptionData::detach_condition_and_queue_is_empty()
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-  wait_set_data_ = nullptr;
-
-  return message_queue_.empty();
+  wait_set_data_.store(nullptr, std::memory_order_relaxed);
+  return queue_empty_.load(std::memory_order_seq_cst);
 }
 
 ///=============================================================================
@@ -473,13 +481,23 @@ rmw_ret_t SubscriptionData::take_one_message(
 {
   *taken = false;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (is_shutdown_ || message_queue_.empty()) {
+  // TODO(yellowhatter): I assume that the path with non-empty queue should be the most optimized one
+
+  if (is_shutdown_.load(std::memory_order_seq_cst)) {
+    return RMW_RET_OK;
+  }
+
+  std::unique_lock<std::mutex> lock(queue_mutex_);
+  if (message_queue_.empty()) {
     // This tells rcl that the check for a new message was done, but no messages have come in yet.
     return RMW_RET_OK;
   }
   std::unique_ptr<Message> msg_data = std::move(message_queue_.front());
   message_queue_.pop_front();
+  if (message_queue_.empty()) {
+    queue_empty_.store(true, std::memory_order_seq_cst);
+  }
+  lock.unlock();
 
   auto & payload_data = msg_data->payload;
 
@@ -496,6 +514,7 @@ rmw_ret_t SubscriptionData::take_one_message(
 
   // Object that serializes the data
   rmw_zenoh_cpp::Cdr deser(fastbuffer);
+  // TODO(yellowhatter): this is read-only and thus thread-safe
   if (!type_support_->deserialize_ros_message(
       deser.get_cdr(),
       ros_message,
@@ -531,13 +550,23 @@ rmw_ret_t SubscriptionData::take_serialized_message(
 {
   *taken = false;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (is_shutdown_ || message_queue_.empty()) {
+  // TODO(yellowhatter): I assume that the path with non-empty queue should be the most optimized one
+
+  if (is_shutdown_.load(std::memory_order_seq_cst)) {
+    return RMW_RET_OK;
+  }
+  
+  std::unique_lock<std::mutex> lock(queue_mutex_);
+  if (message_queue_.empty()) {
     // This tells rcl that the check for a new message was done, but no messages have come in yet.
     return RMW_RET_OK;
   }
   std::unique_ptr<Message> msg_data = std::move(message_queue_.front());
   message_queue_.pop_front();
+  if (message_queue_.empty()) {
+    queue_empty_.store(true, std::memory_order_seq_cst);
+  }
+  lock.unlock();
 
   auto & payload_data = msg_data->payload;
 
@@ -583,30 +612,35 @@ rmw_ret_t SubscriptionData::take_serialized_message(
 void SubscriptionData::add_new_message(
   std::unique_ptr<SubscriptionData::Message> msg, const std::string & topic_name)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (is_shutdown_) {
+  if (is_shutdown_.load(std::memory_order_seq_cst)) {
     return;
   }
-  const rmw_qos_profile_t adapted_qos_profile = entity_->topic_info().value().qos_;
-  if (adapted_qos_profile.history != RMW_QOS_POLICY_HISTORY_KEEP_ALL &&
-    message_queue_.size() >= adapted_qos_profile.depth)
-  {
-    // Log warning if message is discarded due to hitting the queue depth
-    RMW_ZENOH_LOG_DEBUG_NAMED(
-      "rmw_zenoh_cpp",
-      "Message queue depth of %ld reached, discarding oldest message "
-      "for subscription for %s",
-      adapted_qos_profile.depth,
-      topic_name.c_str());
 
-    // If the adapted_qos_profile.depth is 0, the std::move command below will result
-    // in UB and the z_drop will segfault. We explicitly set the depth to a minimum of 1
-    // in rmw_create_subscription() but to be safe, we only attempt to discard from the
-    // queue if it is non-empty.
-    if (!message_queue_.empty()) {
-      std::unique_ptr<Message> old = std::move(message_queue_.front());
-      message_queue_.pop_front();
+  {
+    const rmw_qos_profile_t& adapted_qos_profile = entity_->topic_info().value().qos_;
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    queue_empty_.store(false, std::memory_order_seq_cst);
+    if (adapted_qos_profile.history != RMW_QOS_POLICY_HISTORY_KEEP_ALL &&
+      message_queue_.size() >= adapted_qos_profile.depth)
+    {
+      // Log warning if message is discarded due to hitting the queue depth
+      RMW_ZENOH_LOG_DEBUG_NAMED(
+        "rmw_zenoh_cpp",
+        "Message queue depth of %ld reached, discarding oldest message "
+        "for subscription for %s",
+        adapted_qos_profile.depth,
+        topic_name.c_str());
+        
+      // If the adapted_qos_profile.depth is 0, the std::move command below will result
+      // in UB and the z_drop will segfault. We explicitly set the depth to a minimum of 1
+      // in rmw_create_subscription() but to be safe, we only attempt to discard from the
+      // queue if it is non-empty.
+      if (!message_queue_.empty()) {
+        std::unique_ptr<Message> old = std::move(message_queue_.front());
+        message_queue_.pop_front();
+      }
     }
+    message_queue_.emplace_back(std::move(msg));
   }
 
   // Check for messages lost if the new sequence number is not monotonically increasing.
@@ -618,6 +652,7 @@ void SubscriptionData::add_new_message(
       last_known_pub_it->second);
     if (seq_increment > 1) {
       const size_t num_msg_lost = seq_increment - 1;
+      std::lock_guard<std::mutex> lock(mutex_);
       events_mgr_->update_event_status(
         ZENOH_EVENT_MESSAGE_LOST,
         num_msg_lost);
@@ -625,14 +660,13 @@ void SubscriptionData::add_new_message(
   }
   // Always update the last known sequence number for the publisher.
   last_known_published_msg_[gid_hash] = msg->attachment.sequence_number();
-
-  message_queue_.emplace_back(std::move(msg));
-
   // Since we added new data, trigger user callback and guard condition if they are available
+  // this is thread-safe
   data_callback_mgr_.trigger_callback();
-  if (wait_set_data_ != nullptr) {
-    wait_set_data_->triggered = true;
-    wait_set_data_->condition_variable.notify_one();
+  rmw_wait_set_data_t* set_data_cb = wait_set_data_.load(std::memory_order_seq_cst);
+  if (set_data_cb != nullptr) {
+    set_data_cb->triggered = true;
+    set_data_cb->condition_variable.notify_one();
   }
 }
 
@@ -641,7 +675,7 @@ void SubscriptionData::set_on_new_message_callback(
   rmw_event_callback_t callback,
   const void * user_data)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  // this is thread-safe
   data_callback_mgr_.set_callback(user_data, std::move(callback));
 }
 

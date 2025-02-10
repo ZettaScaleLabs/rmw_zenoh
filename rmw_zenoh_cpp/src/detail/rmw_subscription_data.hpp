@@ -15,6 +15,7 @@
 #ifndef DETAIL__RMW_SUBSCRIPTION_DATA_HPP_
 #define DETAIL__RMW_SUBSCRIPTION_DATA_HPP_
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -131,6 +132,8 @@ private:
 
   // Internal mutex.
   mutable std::mutex mutex_;
+  // Internal queue mutex.
+  mutable std::mutex queue_mutex_;
   // The parent node.
   const rmw_node_t * rmw_node_;
   // The graph cache.
@@ -147,15 +150,16 @@ private:
   const void * type_support_impl_;
   std::unique_ptr<MessageTypeSupport> type_support_;
   std::deque<std::unique_ptr<Message>> message_queue_;
+  std::atomic_bool queue_empty_;
   // Map GID of a subscription to the sequence number of the message it published.
   std::unordered_map<size_t, int64_t> last_known_published_msg_;
   // Wait set data.
-  rmw_wait_set_data_t * wait_set_data_;
+  std::atomic<rmw_wait_set_data_t*> wait_set_data_;
   // Callback managers.
   DataCallbackManager data_callback_mgr_;
   std::shared_ptr<EventsManager> events_mgr_;
   // Shutdown flag.
-  bool is_shutdown_;
+  std::atomic_bool is_shutdown_;
   // Whether the object has ever successfully been initialized.
   bool initialized_;
 };
