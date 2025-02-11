@@ -653,7 +653,7 @@ void SubscriptionData::add_new_message(
       last_known_pub_it->second);
     if (seq_increment > 1) {
       const size_t num_msg_lost = seq_increment - 1;
-      std::lock_guard<std::mutex> lock(mutex_);
+      // this is thread-safe
       events_mgr_->update_event_status(
         ZENOH_EVENT_MESSAGE_LOST,
         num_msg_lost);
@@ -668,6 +668,7 @@ void SubscriptionData::add_new_message(
   data_callback_mgr_.trigger_callback();
   rmw_wait_set_data_t* set_data_cb = wait_set_data_.load(std::memory_order_seq_cst);
   if (set_data_cb != nullptr) {
+    std::lock_guard<std::mutex> wait_set_lock(set_data_cb->condition_mutex);
     set_data_cb->triggered = true;
     set_data_cb->condition_variable.notify_one();
   }
