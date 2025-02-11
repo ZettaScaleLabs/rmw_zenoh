@@ -616,6 +616,8 @@ void SubscriptionData::add_new_message(
     return;
   }
 
+  const size_t gid_hash = hash_gid(msg->attachment.copy_gid());
+  const auto sn = msg->attachment.sequence_number();
   {
     const rmw_qos_profile_t& adapted_qos_profile = entity_->topic_info().value().qos_;
     std::lock_guard<std::mutex> lock(queue_mutex_);
@@ -644,11 +646,10 @@ void SubscriptionData::add_new_message(
   }
 
   // Check for messages lost if the new sequence number is not monotonically increasing.
-  const size_t gid_hash = hash_gid(msg->attachment.copy_gid());
   auto last_known_pub_it = last_known_published_msg_.find(gid_hash);
   if (last_known_pub_it != last_known_published_msg_.end()) {
     const int64_t seq_increment = std::abs(
-      msg->attachment.sequence_number() -
+      sn -
       last_known_pub_it->second);
     if (seq_increment > 1) {
       const size_t num_msg_lost = seq_increment - 1;
@@ -658,8 +659,10 @@ void SubscriptionData::add_new_message(
         num_msg_lost);
     }
   }
+
   // Always update the last known sequence number for the publisher.
-  last_known_published_msg_[gid_hash] = msg->attachment.sequence_number();
+  last_known_published_msg_[gid_hash] = sn;
+  
   // Since we added new data, trigger user callback and guard condition if they are available
   // this is thread-safe
   data_callback_mgr_.trigger_callback();
