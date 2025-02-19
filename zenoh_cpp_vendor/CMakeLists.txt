@@ -26,7 +26,7 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 #    (Fix potential loss of request/reply messages in case of network congestion)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/ZettaScaleLabs/zenoh-c.git
-  VCS_VERSION 607a04e78a3d0fd49aa1184f00225a1574a1b8be
+  VCS_VERSION 432beed91225c6f80177123ef056dcf7a0af4288
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
@@ -39,7 +39,8 @@ ament_vendor(zenoh_cpp_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
   VCS_VERSION 5dfb68c9ac966925e59bcb52f39b9bc26c0ad6d3
   CMAKE_ARGS
-    -DZENOHCXX_ZENOHC=OFF
+    -DZENOHCXX_ZENOHC=ON
+    -DZENOHCXX_ZENOHPICO=OFF
 )
 
 externalproject_add_stepdependencies(zenoh_cpp_vendor configure zenoh_c_vendor)
