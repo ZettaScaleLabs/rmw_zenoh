@@ -221,7 +221,7 @@ bool SubscriptionData::init()
             sample.get_payload(),
             get_system_time_in_ns(),
             std::move(attachment_data)),
-          std::string(sample.get_keyexpr().as_string_view()));
+          sample.get_keyexpr().as_string_view());
       },
       zenoh::closures::none,
       std::move(sub_options),
@@ -304,7 +304,7 @@ bool SubscriptionData::init()
             sample.get_payload(),
             get_system_time_in_ns(),
             std::move(attachment_data)),
-          std::string(sample.get_keyexpr().as_string_view()));
+          sample.get_keyexpr().as_string_view());
       },
       zenoh::closures::none,
       std::move(sub_options),
@@ -610,7 +610,7 @@ rmw_ret_t SubscriptionData::take_serialized_message(
 
 ///=============================================================================
 void SubscriptionData::add_new_message(
-  std::unique_ptr<SubscriptionData::Message> msg, const std::string & topic_name)
+  std::unique_ptr<SubscriptionData::Message> msg, const std::string_view topic_name)
 {
   if (is_shutdown_.load(std::memory_order_seq_cst)) {
     return;
@@ -631,7 +631,7 @@ void SubscriptionData::add_new_message(
         "Message queue depth of %ld reached, discarding oldest message "
         "for subscription for %s",
         adapted_qos_profile.depth,
-        topic_name.c_str());
+        topic_name);
         
       // If the adapted_qos_profile.depth is 0, the std::move command below will result
       // in UB and the z_drop will segfault. We explicitly set the depth to a minimum of 1

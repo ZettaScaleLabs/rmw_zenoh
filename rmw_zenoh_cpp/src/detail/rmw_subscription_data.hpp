@@ -94,7 +94,7 @@ public:
   bool is_shutdown() const;
 
   // Add a new message to the queue.
-  void add_new_message(std::unique_ptr<Message> msg, const std::string & topic_name);
+  void add_new_message(std::unique_ptr<Message> msg, const std::string_view topic_name);
 
   bool queue_has_data_and_attach_condition_if_not(rmw_wait_set_data_t * wait_set_data);
 
