@@ -620,5 +620,5 @@
     },
   },
 
-  prefix: "test-prefix"
+  namespace: "test-prefix"
 }
