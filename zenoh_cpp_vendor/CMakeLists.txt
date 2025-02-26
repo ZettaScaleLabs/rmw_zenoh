@@ -26,7 +26,7 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 #    (Fix potential loss of request/reply messages in case of network congestion)
 ament_vendor(zenoh_c_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-  VCS_VERSION 261493682c7dc54db3a07079315e009a2e7c1573
+  VCS_VERSION c0675c3e8a901eb0925375c9c715dacf79e43b73
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
