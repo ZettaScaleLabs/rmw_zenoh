@@ -25,8 +25,8 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 # - https://github.com/eclipse-zenoh/zenoh-cpp/pull/407, https://github.com/eclipse-zenoh/zenoh-c/pull/913
 #    (Fix potential loss of request/reply messages in case of network congestion)
 ament_vendor(zenoh_c_vendor
-  VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-  VCS_VERSION c0675c3e8a901eb0925375c9c715dacf79e43b73
+  VCS_URL https://github.com/DenisBiryukov91/zenoh-c.git
+  VCS_VERSION f46bbcf6dc9b64e70e877e48d848eeab01d652c0
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
@@ -36,8 +36,8 @@ ament_vendor(zenoh_c_vendor
 ament_export_dependencies(zenohc)
 
 ament_vendor(zenoh_cpp_vendor
-  VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
-  VCS_VERSION 5dfb68c9ac966925e59bcb52f39b9bc26c0ad6d3
+  VCS_URL https://github.com/DenisBiryukov91/zenoh-cpp.git
+  VCS_VERSION 48b8ecc7dcde665ee2ac3f3a9787cd3806303713
   CMAKE_ARGS
     -DZENOHCXX_ZENOHC=OFF
 )
