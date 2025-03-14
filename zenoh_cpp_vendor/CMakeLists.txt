@@ -34,8 +34,8 @@ set(ZENOHC_CARGO_FLAGS "--no-default-features$<SEMICOLON>--features=shared-memor
 # - Reduce the number of threads in case of scouting
 #  - https://github.com/eclipse-zenoh/zenoh-c/pull/937
 ament_vendor(zenoh_c_vendor
-  VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-  VCS_VERSION 3540a3ce8126e071236352446bc1564787d3fb04
+  VCS_URL https://github.com/ZettaScaleLabs/zenoh-c.git
+  VCS_VERSION d0c6e94b5a2af43d72379c923b8cf4f1765bc7da
   CMAKE_ARGS
     "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
     "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
@@ -46,7 +46,7 @@ ament_export_dependencies(zenohc)
 
 ament_vendor(zenoh_cpp_vendor
   VCS_URL https://github.com/eclipse-zenoh/zenoh-cpp
-  VCS_VERSION 2a127bb0f537e0028359caf1084c879330341592
+  VCS_VERSION 3ac012ab943bf123125df06a2676a25b7c517a9f
   CMAKE_ARGS
     -DZENOHCXX_ZENOHC=OFF
 )
