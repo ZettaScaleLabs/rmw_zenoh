@@ -770,15 +770,24 @@ rmw_ret_t fill_names_and_types(
     });
   // Fill topic names and types.
   std::size_t index = 0;
-  for (const std::pair<std::string, GraphNode::TopicTypeMap> & item : entity_map) {
-    names_and_types->names.data[index] = rcutils_strdup(item.first.c_str(), *allocator);
+
+  // Sort the topics of entity_map alphabetically
+  std::vector<std::string> sorted_topics;
+  for (const auto & item : entity_map) {
+    sorted_topics.push_back(item.first);
+  }
+  std::sort(sorted_topics.begin(), sorted_topics.end());
+
+  for (const auto & topic : sorted_topics) {
+    names_and_types->names.data[index] = rcutils_strdup(topic.c_str(), *allocator);
     if (!names_and_types->names.data[index]) {
       return RMW_RET_BAD_ALLOC;
     }
 
+    auto topic_map = entity_map.at(topic);
     rcutils_ret_t rcutils_ret = rcutils_string_array_init(
       &names_and_types->types[index],
-      item.second.size(),
+      topic_map.size(),
       allocator);
     if (RCUTILS_RET_OK != rcutils_ret) {
       RMW_SET_ERROR_MSG(rcutils_get_error_string().str);
@@ -786,7 +795,7 @@ rmw_ret_t fill_names_and_types(
     }
 
     size_t type_index = 0;
-    for (const std::pair<const std::string, GraphNode::TopicQoSMap> & type : item.second) {
+    for (const std::pair<const std::string, GraphNode::TopicQoSMap> & type : topic_map) {
       char * type_name = rcutils_strdup(_demangle_if_ros_type(type.first).c_str(), *allocator);
       if (!type_name) {
         RMW_SET_ERROR_MSG("failed to allocate memory for type name");
