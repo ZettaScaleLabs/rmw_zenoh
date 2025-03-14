@@ -231,7 +231,6 @@ public:
   // Shutdown the Zenoh session.
   rmw_ret_t shutdown()
   {
-    if (!is_shutdown_)
     {
       std::lock_guard<std::recursive_mutex> lock(mutex_);
       rmw_ret_t ret = RMW_RET_OK;
@@ -249,15 +248,13 @@ public:
       }
 
       is_shutdown_ = true;
-      
-      // asynchronously close session
-      auto close_options = zenoh::Session::SessionCloseOptions::create_default();
-      close_options.out_concurrent = [this](zenoh::CloseHandle&& h) {
-        close_handle_ = std::make_unique<zenoh::CloseHandle>(std::move(h));
-      };
-      // close_handle_ will be initialized here
-      session_->close(std::move(close_options));
+
+      // We specifically do *not* hold the mutex_ while tearing down the session; this allows us
+      // to avoid an AB/BA deadlock if shutdown is racing with graph_sub_data_handler().
     }
+
+    // Drop the shared session.
+    session_.reset();
 
     return RMW_RET_OK;
   }
@@ -398,9 +395,6 @@ public:
   {
     auto ret = this->shutdown();
     nodes_.clear();
-    if(close_handle_) {
-      close_handle_->wait();
-    }
     static_cast<void>(ret);
   }
 
@@ -413,7 +407,6 @@ private:
   std::string enclave_;
   // An owned session.
   std::shared_ptr<zenoh::Session> session_;
-  std::unique_ptr<zenoh::CloseHandle> close_handle_;
   // An optional SHM manager that is initialized of SHM is enabled in the
   // zenoh session config.
   std::optional<zenoh::ShmProvider> shm_provider_;
