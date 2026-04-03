@@ -25,8 +25,7 @@ else()
   # latter is a list separater in cmake and hence the string will be split into two when expanded.
   set(ZENOHC_CARGO_FLAGS "--features=shared-memory zenoh/transport_serial")
 
-  # Set VCS_VERSION branch branch ROS/rust-1.75 of zenoh-c,
-  # on commit corresponding to Zenoh 1.8.0.
+  # Set VCS_VERSION to to 1.8.0 commits of zenoh/zenoh-c/zenoh-cpp.
   # Main changes wrt. previous version:
   # * Query cancellation
   #   - https://github.com/eclipse-zenoh/zenoh/pull/2223
@@ -51,7 +50,7 @@ else()
   #   - https://github.com/eclipse-zenoh/zenoh/pull/2432
   ament_vendor(zenoh_c_vendor
     VCS_URL https://github.com/eclipse-zenoh/zenoh-c.git
-    VCS_VERSION 0e3ec084142382096d09f7fc2ad59385998b92e6
+    VCS_VERSION c1a477d3f5efc3abc0f0cf95e0773225d00dea3b
     CMAKE_ARGS
       "-DZENOHC_CARGO_FLAGS=${ZENOHC_CARGO_FLAGS}"
       "-DZENOHC_BUILD_WITH_UNSTABLE_API=TRUE"
